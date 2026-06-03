@@ -80,14 +80,36 @@
 
 ## Traceability
 
-_(Filled by roadmap agent)_
-
-| REQ-ID | Phase |
-|--------|-------|
-| SESS-01–05 | — |
-| SETUP-01–03 | — |
-| TURN-01–04 | — |
-| CHAL-01–06 | — |
-| ROUL-01–04 | — |
-| RNDM-01–04 | — |
-| UX-01–05 | — |
+| REQ-ID | Phase | Status |
+|--------|-------|--------|
+| SESS-01 | Phase 2 | Pending |
+| SESS-02 | Phase 2 | Pending |
+| SESS-03 | Phase 2 | Pending |
+| SESS-04 | Phase 2 | Pending |
+| SESS-05 | Phase 2 | Pending |
+| SETUP-01 | Phase 3 | Pending |
+| SETUP-02 | Phase 3 | Pending |
+| SETUP-03 | Phase 3 | Pending |
+| TURN-01 | Phase 4 | Pending |
+| TURN-02 | Phase 4 | Pending |
+| TURN-03 | Phase 4 | Pending |
+| TURN-04 | Phase 4 | Pending |
+| CHAL-01 | Phase 5 | Pending |
+| CHAL-02 | Phase 5 | Pending |
+| CHAL-03 | Phase 5 | Pending |
+| CHAL-04 | Phase 5 | Pending |
+| CHAL-05 | Phase 5 | Pending |
+| CHAL-06 | Phase 5 | Pending |
+| ROUL-01 | Phase 6 | Pending |
+| ROUL-02 | Phase 6 | Pending |
+| ROUL-03 | Phase 6 | Pending |
+| ROUL-04 | Phase 6 | Pending |
+| RNDM-01 | Phase 6 | Pending |
+| RNDM-02 | Phase 6 | Pending |
+| RNDM-03 | Phase 6 | Pending |
+| RNDM-04 | Phase 7 | Pending |
+| UX-01 | Phase 4 | Pending |
+| UX-02 | Phase 6 | Pending |
+| UX-03 | Phase 8 | Pending |
+| UX-04 | Phase 2 | Pending |
+| UX-05 | Phase 3 | Pending |

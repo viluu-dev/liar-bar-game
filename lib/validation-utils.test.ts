@@ -56,13 +56,14 @@ describe('Request validation functions', () => {
   })
 
   it('should validate start game request', () => {
-    const validData = { playerId: '550e8400-e29b-41d4-a716-446655440000' }
+    const validData = { playerId: '550e8400-e29b-41d4-a716-446655440000', joinCode: 'TEST' }
     expect(() => validateStartGameRequest(validData)).not.toThrow()
   })
 
   it('should validate play cards request', () => {
     const validData = {
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       cardIndices: [0, 1],
       declaredCard: 'ACE' as const
     }
@@ -72,13 +73,14 @@ describe('Request validation functions', () => {
   it('should validate challenge request', () => {
     const validData = {
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       action: 'liar' as const
     }
     expect(() => validateChallengeRequest(validData)).not.toThrow()
   })
 
   it('should validate roulette request', () => {
-    const validData = { playerId: '550e8400-e29b-41d4-a716-446655440000' }
+    const validData = { playerId: '550e8400-e29b-41d4-a716-446655440000', joinCode: 'TEST' }
     expect(() => validateRouletteRequest(validData)).not.toThrow()
   })
 })
@@ -87,6 +89,7 @@ describe('Query validation', () => {
   it('should validate game state query', () => {
     const validData = {
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      code: 'TEST',
       since: '42'
     }
     const result = validateGameStateQuery(validData)
@@ -96,7 +99,8 @@ describe('Query validation', () => {
 
   it('should validate game state query without since parameter', () => {
     const validData = {
-      playerId: '550e8400-e29b-41d4-a716-446655440000'
+      playerId: '550e8400-e29b-41d4-a716-446655440000',
+      code: 'TEST'
     }
     const result = validateGameStateQuery(validData)
     expect(result.since).toBeUndefined()

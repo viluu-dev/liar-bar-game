@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { randomUUID } from 'crypto'
+import { randomUUID, randomBytes } from 'crypto'
 import { CreateGameRequestSchema } from '@/lib/schemas'
 import { withGameLock, setGameState, getGameState } from '@/lib/redis'
 import type { GameState, Player } from '@/lib/types'
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     // Parse and validate request body
     const body = await request.json()
     const parseResult = CreateGameRequestSchema.safeParse(body)
-    
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: 'Invalid request: Player name is required and must be 1-50 characters' },
@@ -17,57 +17,60 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { playerName } = parseResult.data
+    const { playerName, settings } = parseResult.data
+    const bullets = settings?.bullets ?? 1
 
-    // Use distributed lock to ensure only one game can be created at a time
-    const result = await withGameLock(async () => {
-      // Check if a game already exists
-      const existingGame = await getGameState()
-      if (existingGame) {
+    // Generate a join code upfront so we can lock on it
+    const joinCode = randomBytes(2).toString('hex').toUpperCase()
+
+    // Use distributed lock keyed to the new code
+    const result = await withGameLock(joinCode, async () => {
+      // Check if a game with this code already exists
+      const existingGame = await getGameState(joinCode)
+      if (existingGame && existingGame.status !== 'finished') {
         throw new Error('A game session already exists')
       }
 
-      // Generate UUID for the player
       const playerId = randomUUID()
       const now = Date.now()
 
-      // Create the host player
       const hostPlayer: Player = {
         id: playerId,
         name: playerName.trim(),
-        hand: [], // Empty until cards are dealt
+        hand: [],
         isAlive: true,
         isSafe: false,
-        isHost: true, // Creator becomes the host
+        isHost: true,
         joinedAt: now,
         lastSeenAt: now
       }
 
-      // Initialize the game state in lobby phase
       const initialGameState: GameState = {
         status: 'lobby',
         players: [hostPlayer],
-        deck: [], // Empty until game starts
-        tableCard: null, // Set when game starts
-        pile: [], // Empty initially
+        deck: [],
+        tableCard: null,
+        pile: [],
         pileCount: 0,
-        currentPlayerIndex: -1, // Not set until game starts
+        currentPlayerIndex: -1,
         challengerIndex: null,
         lastPlay: null,
         roulettePlayerId: null,
         roundNumber: 1,
         winnerId: null,
-        version: 0, // Initial version
+        version: 0,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        joinCode,
+        settings: { bullets }
       }
 
-      // Store the initial game state
       await setGameState(initialGameState)
 
       return {
         playerId,
-        gameVersion: initialGameState.version
+        gameVersion: initialGameState.version,
+        joinCode
       }
     })
 
@@ -75,7 +78,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Game creation error:', error)
-    
+
     // Handle specific error types
     if (error instanceof Error && error.message === 'A game session already exists') {
       return NextResponse.json(

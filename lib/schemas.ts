@@ -19,7 +19,9 @@ export const PlayerSchema = z.object({
   isSafe: z.boolean(),
   isHost: z.boolean(),
   joinedAt: z.number().int().positive(),
-  lastSeenAt: z.number().int().positive()
+  lastSeenAt: z.number().int().positive(),
+  chamber: z.array(z.boolean()).length(6).optional(),      // server-only
+  chamberIndex: z.number().int().min(0).max(5).optional(), // pulls taken this cylinder
 })
 
 // Projected player schema for client responses
@@ -31,7 +33,8 @@ export const ProjectedPlayerSchema = z.object({
   isSafe: z.boolean(),
   isHost: z.boolean(),
   joinedAt: z.number().int().positive(),
-  lastSeenAt: z.number().int().positive()
+  lastSeenAt: z.number().int().positive(),
+  chamberIndex: z.number().int().min(0).max(5).optional(), // how many pulls taken (safe to expose)
 })
 
 // Last play validation schema
@@ -71,8 +74,6 @@ export const GameStateSchema = z.object({
   updatedAt: z.number().int().positive(),
   joinCode: z.string().length(4).optional(),
   settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional(),
-  chamber: z.array(z.boolean()).length(6).optional(),
-  chamberIndex: z.number().int().min(0).max(5).optional(),
   rematchPlayerIds: z.array(z.string().uuid()).optional(),
 })
 
@@ -92,7 +93,6 @@ export const ProjectedGameStateSchema = z.object({
   version: z.number().int().min(0),
   joinCode: z.string().length(4).optional(),
   settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional(),
-  chamberIndex: z.number().int().min(0).max(5).optional(),
   rematchPlayerIds: z.array(z.string().uuid()).optional(),
 })
 

@@ -3,7 +3,7 @@
  * Handles card dealing, deck management, and game mechanics
  */
 
-import { Card, TableCard, DealResult } from './types'
+import { Card, TableCard, DealResult, ChallengeResult } from './types'
 
 /**
  * Creates the initial 20-card deck for Liar's Bar
@@ -124,9 +124,117 @@ export function selectTableCard(): TableCard {
 }
 
 /**
+ * Returns an updated game state with the inactive player's turn skipped,
+ * or null if no skip is needed.
+ * - playing: advance currentPlayerIndex to next alive non-safe player
+ * - challenge: auto-believe (challenger becomes current player, skip if safe)
+ *
+ * @param state Current authoritative game state
+ * @param now Current timestamp in ms (injected for testability)
+ * @param inactiveThresholdMs How long a player can be inactive before being skipped
+ */
+export function autoSkipIfInactive(
+  state: { status: string; players: { id: string; isAlive: boolean; isSafe: boolean; lastSeenAt: number }[]; currentPlayerIndex: number; challengerIndex: number | null; lastPlay: unknown; version: number; updatedAt: number },
+  now: number,
+  inactiveThresholdMs = 90_000
+): typeof state | null {
+  if (state.status === 'playing' && state.currentPlayerIndex >= 0) {
+    const current = state.players[state.currentPlayerIndex]
+    if (current?.isAlive && now - current.lastSeenAt > inactiveThresholdMs) {
+      const nextIdx = getNextAlivePlayerIndex(state.players, state.currentPlayerIndex, true)
+      if (nextIdx === null) return null
+      return { ...state, currentPlayerIndex: nextIdx, version: state.version + 1, updatedAt: now }
+    }
+  }
+
+  if (state.status === 'challenge' && state.challengerIndex !== null) {
+    const challenger = state.players[state.challengerIndex]
+    if (challenger?.isAlive && now - challenger.lastSeenAt > inactiveThresholdMs) {
+      // Auto-believe: skip safe challengers to next non-safe alive player
+      const nextIdx = challenger.isSafe
+        ? (getNextAlivePlayerIndex(state.players, state.challengerIndex, true) ?? state.challengerIndex)
+        : state.challengerIndex
+      return {
+        ...state,
+        status: 'playing',
+        currentPlayerIndex: nextIdx,
+        challengerIndex: null,
+        lastPlay: null,
+        version: state.version + 1,
+        updatedAt: now,
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Initialises a 6-slot revolver chamber with `bullets` live rounds at random positions.
+ * Uses crypto.getRandomValues so the layout is unpredictable server-side.
+ *
+ * @param bullets Number of live rounds to load (1–6)
+ */
+export function initChamber(bullets: number): boolean[] {
+  const chamber = new Array<boolean>(6).fill(false)
+  // Fisher-Yates shuffle to pick `bullets` distinct positions
+  const positions = [0, 1, 2, 3, 4, 5]
+  for (let i = 5; i > 0; i--) {
+    const arr = new Uint32Array(1)
+    crypto.getRandomValues(arr)
+    const j = arr[0] % (i + 1)
+    ;[positions[i], positions[j]] = [positions[j], positions[i]]
+  }
+  for (let i = 0; i < bullets; i++) {
+    chamber[positions[i]] = true
+  }
+  return chamber
+}
+
+/**
+ * Resolves a "liar" challenge by checking the played cards against the table card.
+ * Jokers count as valid wildcards for any table card.
+ *
+ * @param cards Actual cards that were played (from lastPlay.cards)
+ * @param tableCard The declared table card for this round
+ * @returns ChallengeResult with isValid flag and list of invalid cards
+ */
+export function resolveChallenge(cards: Card[], tableCard: TableCard): ChallengeResult {
+  const invalidCards = cards.filter(c => c !== tableCard && c !== 'JOKER')
+  return {
+    isValid: invalidCards.length === 0,
+    invalidCards,
+  }
+}
+
+/**
+ * Finds the next player index that is alive (and optionally non-safe) after the given index.
+ * Wraps around circularly. Returns null if no qualifying player exists.
+ *
+ * @param players Array of players
+ * @param fromIndex Index of the player whose turn just ended
+ * @param skipSafe When true, also skip safe players (used for currentPlayerIndex advancement)
+ */
+export function getNextAlivePlayerIndex(
+  players: { isAlive: boolean; isSafe: boolean }[],
+  fromIndex: number,
+  skipSafe: boolean = false
+): number | null {
+  const count = players.length
+  for (let i = 1; i < count; i++) {
+    const idx = (fromIndex + i) % count
+    const p = players[idx]
+    if (!p.isAlive) continue
+    if (skipSafe && p.isSafe) continue
+    return idx
+  }
+  return null
+}
+
+/**
  * Validates that the specified card indices exist in the player's hand
  * and that 1-3 cards are selected
- * 
+ *
  * @param hand Player's current hand
  * @param cardIndices Array of indices to validate
  * @returns true if all indices are valid and count is 1-3

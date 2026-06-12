@@ -51,8 +51,6 @@ describe('/api/game/rematch', () => {
     updatedAt: 2000,
     joinCode: 'ABCD',
     settings: { bullets: 1 },
-    chamber: [false, true, false, false, false, false],
-    chamberIndex: 2,
     ...overrides,
   })
 
@@ -173,8 +171,6 @@ describe('/api/game/rematch', () => {
           challengerIndex: null,
           roulettePlayerId: null,
           winnerId: null,
-          chamber: undefined,
-          chamberIndex: undefined,
           currentPlayerIndex: -1,
         })
       )
@@ -192,12 +188,12 @@ describe('/api/game/rematch', () => {
       )
     })
 
-    it('adds clicking player to rematchPlayerIds', async () => {
+    it('resets rematchPlayerIds to empty on lobby transition', async () => {
       mockGetGameState.mockResolvedValue(makeFinishedState())
       await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'ABCD' }))
       expect(mockSetGameState).toHaveBeenCalledWith(
         expect.objectContaining({
-          rematchPlayerIds: [HOST_UUID],
+          rematchPlayerIds: [],
         })
       )
     })
@@ -235,14 +231,16 @@ describe('/api/game/rematch', () => {
       )
     })
 
-    it('does not double-add a player who already requested', async () => {
+    it('host re-clicking still creates lobby (host click always transitions)', async () => {
       const state = makeFinishedState({ rematchPlayerIds: [HOST_UUID] })
       mockGetGameState.mockResolvedValue(state)
       const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'ABCD' }))
       const body = await res.json()
       expect(body.success).toBe(true)
-      // Idempotent — no setGameState call needed
-      expect(mockSetGameState).not.toHaveBeenCalled()
+      // Host always creates lobby — setGameState should be called
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'lobby' })
+      )
     })
 
     it('increments version on new rematch entry', async () => {

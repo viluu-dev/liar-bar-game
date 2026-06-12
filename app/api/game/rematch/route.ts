@@ -36,23 +36,16 @@ export async function POST(request: NextRequest) {
       const alreadyRequested = currentRematchIds.includes(playerId)
 
       if (gameState.status === 'finished') {
-        const updatedRematchIds = alreadyRequested
-          ? currentRematchIds
-          : [...currentRematchIds, playerId]
-
-        const isFirstClick = currentRematchIds.length === 0 && !alreadyRequested
-
-        if (isFirstClick) {
-          // Transition finished → lobby, keep all players but reset game state
-          // Determine host: original host stays host; if clicking player is original host,
-          // they become host; otherwise original host stays
-          const originalHost = gameState.players.find(p => p.isHost)
-
+        if (playerInGame.isHost) {
+          // Host: create lobby immediately — all players reset and redirected via polling
           const resetPlayers = gameState.players.map(p => ({
             ...p,
             hand: [] as typeof p.hand,
+            isAlive: true,
             isSafe: false,
-            isHost: originalHost ? p.id === originalHost.id : p.id === playerId,
+            isHost: p.isHost, // keep original host assignment
+            chamber: undefined,
+            chamberIndex: undefined,
           }))
 
           const updatedState = {
@@ -67,10 +60,8 @@ export async function POST(request: NextRequest) {
             challengerIndex: null,
             roulettePlayerId: null,
             winnerId: null,
-            chamber: undefined,
-            chamberIndex: undefined,
             currentPlayerIndex: -1,
-            rematchPlayerIds: updatedRematchIds,
+            rematchPlayerIds: [],
             version: gameState.version + 1,
             updatedAt: Date.now(),
           }
@@ -78,15 +69,12 @@ export async function POST(request: NextRequest) {
           await setGameState(updatedState)
           return updatedState.version
         } else {
-          // Subsequent finished-state click: just add to rematchPlayerIds
-          if (alreadyRequested) {
-            // No change needed, idempotent
-            return gameState.version
-          }
+          // Non-host: record interest only, stay in finished state
+          if (alreadyRequested) return gameState.version
 
           const updatedState = {
             ...gameState,
-            rematchPlayerIds: updatedRematchIds,
+            rematchPlayerIds: [...currentRematchIds, playerId],
             version: gameState.version + 1,
             updatedAt: Date.now(),
           }
@@ -94,13 +82,8 @@ export async function POST(request: NextRequest) {
           return updatedState.version
         }
       } else {
-        // status === 'lobby'
-        // Player is already in the lobby (kept from original game)
-        // Just add them to rematchPlayerIds if not already there
-        if (alreadyRequested) {
-          return gameState.version
-        }
-
+        // status === 'lobby' — host already created lobby, player is in it via polling redirect
+        if (alreadyRequested) return gameState.version
         const updatedState = {
           ...gameState,
           rematchPlayerIds: [...currentRematchIds, playerId],

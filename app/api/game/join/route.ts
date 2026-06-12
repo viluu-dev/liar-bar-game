@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
     // Parse and validate request body
     const body = await request.json()
     const parseResult = JoinGameRequestSchema.safeParse(body)
-    
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: 'Invalid request: Player name is required and must be 1-50 characters' },
@@ -17,12 +17,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { playerName } = parseResult.data
+    const { playerName, joinCode } = parseResult.data
+
+    if (!joinCode) {
+      return NextResponse.json(
+        { error: 'Join code is required.' },
+        { status: 400 }
+      )
+    }
 
     // Use distributed lock to ensure atomic game state updates
-    const result = await withGameLock(async () => {
-      // Check if a game exists
-      const gameState = await getGameState()
+    const result = await withGameLock(joinCode, async () => {
+      // Check if a game exists with this code
+      const gameState = await getGameState(joinCode)
       if (!gameState) {
         throw new Error('No game session exists')
       }
@@ -30,6 +37,11 @@ export async function POST(request: NextRequest) {
       // Validate game is in lobby phase
       if (gameState.status !== 'lobby') {
         throw new Error('Game is already in progress')
+      }
+
+      // Validate join code matches
+      if (joinCode.toUpperCase() !== gameState.joinCode) {
+        throw new Error('Invalid join code')
       }
 
       // Enforce 6-player maximum limit
@@ -82,7 +94,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Game join error:', error)
-    
+
     // Handle specific error types with appropriate status codes
     if (error instanceof Error) {
       switch (error.message) {
@@ -105,6 +117,11 @@ export async function POST(request: NextRequest) {
           return NextResponse.json(
             { error: 'A player with that name has already joined. Please choose a different name.' },
             { status: 409 }
+          )
+        case 'Invalid join code':
+          return NextResponse.json(
+            { error: 'Invalid join code.' },
+            { status: 400 }
           )
       }
     }

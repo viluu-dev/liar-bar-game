@@ -1,6 +1,7 @@
 'use client'
 
 import { ProjectedPlayer } from '@/lib/types'
+import ChamberDots from './ChamberDots'
 
 interface PlayersListProps {
   players: ProjectedPlayer[]
@@ -96,6 +97,11 @@ function PlayerCard({ player, isCurrentPlayer, isActivePlayer, position }: Playe
                 <span className="text-lg">{getStatusIcon()}</span>
               )}
             </div>
+            {player.isAlive && player.chamberIndex !== undefined && (
+              <div className="mt-1">
+                <ChamberDots chamberIndex={player.chamberIndex} size="sm" />
+              </div>
+            )}
             <div className="text-sm text-gray-400">
               {getStatusText()}
             </div>
@@ -104,7 +110,7 @@ function PlayerCard({ player, isCurrentPlayer, isActivePlayer, position }: Playe
 
         {/* Card Count Display */}
         {player.isAlive && !player.isSafe && (
-          <div className="flex space-x-1">
+          <div className="flex space-x-1 shrink-0">
             {Array.from({ length: player.handCount }, (_, i) => (
               <div 
                 key={i}

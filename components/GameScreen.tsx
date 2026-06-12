@@ -26,6 +26,7 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
         playerId={playerId}
         joinCode={joinCode}
         rematchPlayerIds={gameState.rematchPlayerIds}
+        isHost={gameState.players.find(p => p.id === playerId)?.isHost ?? false}
       />
     )
   }
@@ -167,7 +168,6 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
             loser={gameState.players.find(p => p.id === gameState.roulettePlayerId)!}
             players={gameState.players}
             playerId={playerId}
-            chamberIndex={gameState.chamberIndex}
             onRoulette={handleRoulette}
           />
         ) : (

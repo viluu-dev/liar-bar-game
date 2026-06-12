@@ -16,13 +16,15 @@ export type GameStatus = 'lobby' | 'playing' | 'challenge' | 'roulette' | 'finis
  */
 export interface Player {
   id: string              // UUID, stable across reconnects
-  name: string            
+  name: string
   hand: Card[]            // Private - only visible to owner
-  isAlive: boolean        
+  isAlive: boolean
   isSafe: boolean         // Emptied hand this round
-  isHost: boolean         
+  isHost: boolean
   joinedAt: number        // Unix timestamp
   lastSeenAt: number      // Updated on each poll/action
+  chamber?: boolean[]     // Personal 6-slot cylinder, server-only
+  chamberIndex?: number   // How many times this player has pulled
 }
 
 /**
@@ -38,6 +40,7 @@ export interface ProjectedPlayer {
   isHost: boolean
   joinedAt: number
   lastSeenAt: number
+  chamberIndex?: number   // Pulls taken (safe to expose; doesn't reveal bullet position)
 }
 
 /**
@@ -86,8 +89,6 @@ export interface GameState {
   updatedAt: number
   joinCode?: string
   settings?: { bullets: number }
-  chamber?: boolean[]   // 6-slot array, server-only (never projected)
-  chamberIndex?: number // which slot fires next
   rematchPlayerIds?: string[] // players who clicked "Play Again"
 }
 
@@ -110,7 +111,6 @@ export interface ProjectedGameState {
   version: number
   joinCode?: string
   settings?: { bullets: number }
-  chamberIndex?: number
   rematchPlayerIds?: string[] // players who clicked "Play Again"
 }
 

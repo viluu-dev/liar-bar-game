@@ -2,11 +2,11 @@
 
 @layer components {
   .button-primary {
-    @apply bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200;
+    @apply bg-red-600 hover:bg-red-700 active:scale-95 disabled:bg-gray-600 disabled:cursor-not-allowed disabled:active:scale-100 text-white font-semibold py-3 px-6 min-h-[44px] rounded-lg transition-all duration-150;
   }
-  
+
   .button-secondary {
-    @apply bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200;
+    @apply bg-gray-700 hover:bg-gray-600 active:scale-95 disabled:bg-gray-800 disabled:cursor-not-allowed disabled:active:scale-100 text-white font-semibold py-3 px-6 min-h-[44px] rounded-lg transition-all duration-150;
   }
   
   .input-field {

@@ -16,23 +16,23 @@ vi.mock('@/lib/redis', () => ({
   withGameLock: vi.fn()
 }))
 
-// Mock the game logic functions to control randomness in tests
 vi.mock('@/lib/game-logic', () => ({
   createInitialDeck: vi.fn(() => [
     'ACE', 'ACE', 'ACE', 'ACE', 'ACE', 'ACE',
-    'KING', 'KING', 'KING', 'KING', 'KING', 'KING', 
+    'KING', 'KING', 'KING', 'KING', 'KING', 'KING',
     'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN',
     'JOKER', 'JOKER'
   ]),
-  shuffleDeck: vi.fn((deck) => [...deck]), // Return deck as-is for predictable tests
+  shuffleDeck: vi.fn((deck) => [...deck]),
   dealCards: vi.fn(() => ({
     playerHands: [
-      ['ACE', 'ACE', 'KING', 'KING', 'QUEEN'], // Player 1 hand
-      ['ACE', 'ACE', 'KING', 'KING', 'QUEEN']  // Player 2 hand
+      ['ACE', 'ACE', 'KING', 'KING', 'QUEEN'],
+      ['ACE', 'ACE', 'KING', 'KING', 'QUEEN']
     ],
     remainingDeck: ['ACE', 'ACE', 'KING', 'KING', 'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN', 'JOKER', 'JOKER']
   })),
-  selectTableCard: vi.fn(() => 'ACE')
+  selectTableCard: vi.fn(() => 'ACE'),
+  initChamber: vi.fn(() => [false, false, false, false, false, false]),
 }))
 
 describe('/api/game/start', () => {
@@ -49,9 +49,9 @@ describe('/api/game/start', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    
+
     // Mock withGameLock to simply execute the function
-    mockWithGameLock.mockImplementation(async (fn) => {
+    mockWithGameLock.mockImplementation(async (_code, fn) => {
       return await fn()
     })
   })
@@ -59,7 +59,7 @@ describe('/api/game/start', () => {
   afterEach(async () => {
     // Clean up any test game state
     try {
-      await mockDeleteGameState()
+      await mockDeleteGameState('TEST')
     } catch (error) {
       // Ignore cleanup errors
     }
@@ -118,7 +118,8 @@ describe('/api/game/start', () => {
       mockSetGameState.mockResolvedValue()
 
       const request = createMockRequest({
-        playerId: HOST_UUID
+        playerId: HOST_UUID,
+        joinCode: 'TEST'
       })
 
       const response = await POST(request)
@@ -180,7 +181,8 @@ describe('/api/game/start', () => {
       })
 
       const request = createMockRequest({
-        playerId: HOST_UUID
+        playerId: HOST_UUID,
+        joinCode: 'TEST'
       })
 
       await POST(request)
@@ -211,7 +213,8 @@ describe('/api/game/start', () => {
       mockSetGameState.mockResolvedValue()
 
       const request = createMockRequest({
-        playerId: HOST_UUID
+        playerId: HOST_UUID,
+        joinCode: 'TEST'
       })
 
       await POST(request)
@@ -258,7 +261,8 @@ describe('/api/game/start', () => {
       mockGetGameState.mockResolvedValue(null)
 
       const request = createMockRequest({
-        playerId: HOST_UUID
+        playerId: HOST_UUID,
+        joinCode: 'TEST'
       })
 
       const response = await POST(request)
@@ -273,7 +277,8 @@ describe('/api/game/start', () => {
       mockGetGameState.mockResolvedValue(gameState)
 
       const request = createMockRequest({
-        playerId: HOST_UUID
+        playerId: HOST_UUID,
+        joinCode: 'TEST'
       })
 
       const response = await POST(request)
@@ -288,7 +293,8 @@ describe('/api/game/start', () => {
       mockGetGameState.mockResolvedValue(gameState)
 
       const request = createMockRequest({
-        playerId: UNKNOWN_UUID
+        playerId: UNKNOWN_UUID,
+        joinCode: 'TEST'
       })
 
       const response = await POST(request)
@@ -303,7 +309,8 @@ describe('/api/game/start', () => {
       mockGetGameState.mockResolvedValue(gameState)
 
       const request = createMockRequest({
-        playerId: PLAYER2_UUID // Not the host
+        playerId: PLAYER2_UUID, // Not the host
+        joinCode: 'TEST'
       })
 
       const response = await POST(request)
@@ -331,7 +338,8 @@ describe('/api/game/start', () => {
       mockGetGameState.mockResolvedValue(gameState)
 
       const request = createMockRequest({
-        playerId: HOST_UUID
+        playerId: HOST_UUID,
+        joinCode: 'TEST'
       })
 
       const response = await POST(request)

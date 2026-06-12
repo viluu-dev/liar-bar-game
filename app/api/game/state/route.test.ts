@@ -6,55 +6,70 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { GET } from './route'
-import { getGameState, setGameState, projectGameView } from '@/lib/redis'
+import { getGameState, setGameState, projectGameView, withGameLock } from '@/lib/redis'
 import type { GameState, Player } from '@/lib/types'
 
 // Mock Redis functions
 vi.mock('@/lib/redis', () => ({
   getGameState: vi.fn(),
   setGameState: vi.fn(),
-  projectGameView: vi.fn()
+  projectGameView: vi.fn(),
+  withGameLock: vi.fn(),
 }))
 
 const mockedGetGameState = vi.mocked(getGameState)
 const mockedSetGameState = vi.mocked(setGameState)
 const mockedProjectGameView = vi.mocked(projectGameView)
+const mockedWithGameLock = vi.mocked(withGameLock)
 
 describe('/api/game/state GET', () => {
   const playerId = '123e4567-e89b-12d3-a456-426614174000'
-  
+  const code = 'TEST'
+
   beforeEach(() => {
     vi.clearAllMocks()
+    // withGameLock no-ops by default (auto-skip path)
+    mockedWithGameLock.mockImplementation(async (_code, fn) => fn())
   })
 
   it('should return error for missing playerId', async () => {
-    const request = new NextRequest('http://localhost/api/game/state')
-    
+    const request = new NextRequest(`http://localhost/api/game/state?code=${code}`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
+    expect(response.status).toBe(400)
+    expect(data.error).toContain('playerId is required')
+  })
+
+  it('should return error for missing code', async () => {
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}`)
+
+    const response = await GET(request)
+    const data = await response.json()
+
     expect(response.status).toBe(400)
     expect(data.error).toContain('playerId is required')
   })
 
   it('should return error for invalid playerId format', async () => {
-    const request = new NextRequest('http://localhost/api/game/state?playerId=invalid-uuid')
-    
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=invalid-uuid&code=${code}`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
     expect(response.status).toBe(400)
     expect(data.error).toContain('valid UUID')
   })
 
   it('should return phase:none when no game exists', async () => {
     mockedGetGameState.mockResolvedValue(null)
-    
-    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}`)
-    
+
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
     expect(response.status).toBe(200)
     expect(data).toEqual({
       version: 0,
@@ -90,14 +105,14 @@ describe('/api/game/state GET', () => {
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
-    
+
     mockedGetGameState.mockResolvedValue(mockGameState)
-    
-    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&since=5`)
-    
+
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}&since=5`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
     expect(response.status).toBe(200)
     expect(data).toEqual({
       version: 5,
@@ -132,14 +147,14 @@ describe('/api/game/state GET', () => {
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
-    
+
     mockedGetGameState.mockResolvedValue(mockGameState)
-    
-    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}`)
-    
+
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
     expect(response.status).toBe(404)
     expect(data.error).toContain('Player not found')
   })
@@ -172,9 +187,9 @@ describe('/api/game/state GET', () => {
       createdAt: now,
       updatedAt: now
     }
-    
+
     const mockProjectedState = {
-      status: 'lobby',
+      status: 'lobby' as const,
       players: [{
         id: playerId,
         name: 'Test Player',
@@ -185,7 +200,7 @@ describe('/api/game/state GET', () => {
         joinedAt: now,
         lastSeenAt: now
       }],
-      myHand: ['ACE', 'KING'],
+      myHand: ['ACE', 'KING'] as ('ACE' | 'KING' | 'QUEEN' | 'JOKER')[],
       tableCard: null,
       pileCount: 0,
       currentPlayerIndex: -1,
@@ -196,21 +211,21 @@ describe('/api/game/state GET', () => {
       winnerId: null,
       version: 4
     }
-    
+
     mockedGetGameState.mockResolvedValue(mockGameState)
     mockedSetGameState.mockResolvedValue()
     mockedProjectGameView.mockReturnValue(mockProjectedState)
-    
-    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&since=2`)
-    
+
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}&since=2`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
     expect(response.status).toBe(200)
     expect(data.changed).toBe(true)
     expect(data.version).toBe(4)
     expect(data.gameState).toEqual(mockProjectedState)
-    
+
     // Verify that projectGameView was called with updated state
     expect(mockedProjectGameView).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -253,9 +268,9 @@ describe('/api/game/state GET', () => {
       createdAt: Date.now(),
       updatedAt: Date.now()
     }
-    
+
     const mockProjectedState = {
-      status: 'lobby',
+      status: 'lobby' as const,
       players: [],
       myHand: [],
       tableCard: null,
@@ -268,16 +283,16 @@ describe('/api/game/state GET', () => {
       winnerId: null,
       version: 3
     }
-    
+
     mockedGetGameState.mockResolvedValue(mockGameState)
     mockedSetGameState.mockRejectedValue(new Error('Redis error'))
     mockedProjectGameView.mockReturnValue(mockProjectedState)
-    
-    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}`)
-    
+
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
     // Should still return projected state even if timestamp update fails
     expect(response.status).toBe(200)
     expect(data.gameState).toEqual(mockProjectedState)
@@ -285,12 +300,12 @@ describe('/api/game/state GET', () => {
 
   it('should handle getGameState errors', async () => {
     mockedGetGameState.mockRejectedValue(new Error('Redis connection failed'))
-    
-    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}`)
-    
+
+    const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}`)
+
     const response = await GET(request)
     const data = await response.json()
-    
+
     expect(response.status).toBe(500)
     expect(data.error).toContain('Failed to retrieve game state')
   })

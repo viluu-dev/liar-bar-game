@@ -89,9 +89,8 @@ export default function GameStatus({ gameState, playerId }: GameStatusProps) {
         </div>
       )}
       
-      {/* Game Info */}
       <div className="text-xs text-gray-500 mt-1">
-        Version {gameState.version} • {gameState.players.filter(p => p.isAlive).length} alive
+        {gameState.players.filter(p => p.isAlive).length} alive
       </div>
     </div>
   )

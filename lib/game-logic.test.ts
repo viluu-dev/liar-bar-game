@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, validatePlay } from './game-logic'
+import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive } from './game-logic'
 import type { Card, TableCard } from './types'
 
 describe('createInitialDeck', () => {
@@ -318,6 +318,174 @@ describe('validatePlay', () => {
     expect(validatePlay(singleCardHand, [0])).toBe(true)
     expect(validatePlay(singleCardHand, [1])).toBe(false)
     expect(validatePlay(singleCardHand, [0, 1])).toBe(false)
+  })
+})
+
+describe('autoSkipIfInactive', () => {
+  const NOW = 1_000_000
+  const THRESHOLD = 90_000
+  const STALE = NOW - THRESHOLD - 1  // just over threshold
+  const FRESH = NOW - 10_000          // well within threshold
+
+  const p = (id: string, lastSeenAt: number, opts: { isAlive?: boolean; isSafe?: boolean } = {}) => ({
+    id, isAlive: opts.isAlive ?? true, isSafe: opts.isSafe ?? false, lastSeenAt,
+  })
+
+  const baseState = {
+    version: 5,
+    updatedAt: 900_000,
+    lastPlay: null,
+  }
+
+  describe('playing status', () => {
+    it('returns null when current player is active', () => {
+      const state = { ...baseState, status: 'playing', currentPlayerIndex: 0, challengerIndex: null,
+        players: [p('A', FRESH), p('B', STALE)] }
+      expect(autoSkipIfInactive(state, NOW, THRESHOLD)).toBeNull()
+    })
+
+    it('skips inactive current player to next alive non-safe', () => {
+      const state = { ...baseState, status: 'playing', currentPlayerIndex: 0, challengerIndex: null,
+        players: [p('A', STALE), p('B', FRESH)] }
+      const result = autoSkipIfInactive(state, NOW, THRESHOLD)
+      expect(result?.currentPlayerIndex).toBe(1)
+      expect(result?.version).toBe(6)
+    })
+
+    it('returns null when no next non-safe alive player', () => {
+      const state = { ...baseState, status: 'playing', currentPlayerIndex: 0, challengerIndex: null,
+        players: [p('A', STALE)] }
+      expect(autoSkipIfInactive(state, NOW, THRESHOLD)).toBeNull()
+    })
+  })
+
+  describe('challenge status', () => {
+    it('returns null when challenger is active', () => {
+      const state = { ...baseState, status: 'challenge', currentPlayerIndex: 0, challengerIndex: 1,
+        players: [p('A', STALE), p('B', FRESH)] }
+      expect(autoSkipIfInactive(state, NOW, THRESHOLD)).toBeNull()
+    })
+
+    it('auto-believes when challenger is inactive (transitions to playing)', () => {
+      const state = { ...baseState, status: 'challenge', currentPlayerIndex: 0, challengerIndex: 1,
+        players: [p('A', FRESH), p('B', STALE)] }
+      const result = autoSkipIfInactive(state, NOW, THRESHOLD)
+      expect(result?.status).toBe('playing')
+      expect(result?.currentPlayerIndex).toBe(1) // challenger becomes current
+      expect(result?.challengerIndex).toBeNull()
+      expect(result?.lastPlay).toBeNull()
+    })
+
+    it('skips safe inactive challenger to next non-safe player', () => {
+      const state = { ...baseState, status: 'challenge', currentPlayerIndex: 0, challengerIndex: 1,
+        players: [p('A', FRESH), p('B', STALE, { isSafe: true }), p('C', FRESH)] }
+      const result = autoSkipIfInactive(state, NOW, THRESHOLD)
+      expect(result?.currentPlayerIndex).toBe(2)
+    })
+  })
+
+  it('returns null for non-actionable statuses', () => {
+    const state = { ...baseState, status: 'roulette', currentPlayerIndex: 0, challengerIndex: null,
+      players: [p('A', STALE)] }
+    expect(autoSkipIfInactive(state, NOW, THRESHOLD)).toBeNull()
+  })
+})
+
+describe('resolveChallenge', () => {
+  it('returns isValid=true when all cards match tableCard', () => {
+    const result = resolveChallenge(['KING', 'KING', 'KING'], 'KING')
+    expect(result.isValid).toBe(true)
+    expect(result.invalidCards).toHaveLength(0)
+  })
+
+  it('returns isValid=true when all cards are Jokers', () => {
+    const result = resolveChallenge(['JOKER', 'JOKER'], 'ACE')
+    expect(result.isValid).toBe(true)
+    expect(result.invalidCards).toHaveLength(0)
+  })
+
+  it('treats Jokers as wildcards alongside tableCard', () => {
+    const result = resolveChallenge(['KING', 'JOKER'], 'KING')
+    expect(result.isValid).toBe(true)
+    expect(result.invalidCards).toHaveLength(0)
+  })
+
+  it('returns isValid=false when any card is invalid', () => {
+    const result = resolveChallenge(['KING', 'ACE'], 'KING')
+    expect(result.isValid).toBe(false)
+    expect(result.invalidCards).toEqual(['ACE'])
+  })
+
+  it('returns all invalid cards when multiple are wrong', () => {
+    const result = resolveChallenge(['ACE', 'QUEEN', 'ACE'], 'KING')
+    expect(result.isValid).toBe(false)
+    expect(result.invalidCards).toEqual(['ACE', 'QUEEN', 'ACE'])
+  })
+
+  it('returns isValid=false when none match and not Jokers', () => {
+    const result = resolveChallenge(['ACE', 'QUEEN'], 'KING')
+    expect(result.isValid).toBe(false)
+    expect(result.invalidCards).toHaveLength(2)
+  })
+
+  it('handles single honest card', () => {
+    const result = resolveChallenge(['ACE'], 'ACE')
+    expect(result.isValid).toBe(true)
+  })
+
+  it('handles single dishonest card', () => {
+    const result = resolveChallenge(['QUEEN'], 'ACE')
+    expect(result.isValid).toBe(false)
+    expect(result.invalidCards).toEqual(['QUEEN'])
+  })
+})
+
+describe('getNextAlivePlayerIndex', () => {
+  const alive = { isAlive: true, isSafe: false }
+  const safe   = { isAlive: true, isSafe: true }
+  const dead   = { isAlive: false, isSafe: false }
+
+  it('returns next alive player', () => {
+    expect(getNextAlivePlayerIndex([alive, alive, alive], 0)).toBe(1)
+    expect(getNextAlivePlayerIndex([alive, alive, alive], 1)).toBe(2)
+  })
+
+  it('wraps around end of array', () => {
+    expect(getNextAlivePlayerIndex([alive, alive, alive], 2)).toBe(0)
+  })
+
+  it('skips dead players', () => {
+    expect(getNextAlivePlayerIndex([alive, dead, alive], 0)).toBe(2)
+  })
+
+  it('returns null when no other alive player exists', () => {
+    expect(getNextAlivePlayerIndex([alive, dead, dead], 0)).toBeNull()
+    expect(getNextAlivePlayerIndex([dead, dead, alive], 2)).toBeNull()
+  })
+
+  it('includes safe players when skipSafe=false (default)', () => {
+    expect(getNextAlivePlayerIndex([alive, safe, alive], 0)).toBe(1)
+  })
+
+  it('skips safe players when skipSafe=true', () => {
+    expect(getNextAlivePlayerIndex([alive, safe, alive], 0, true)).toBe(2)
+  })
+
+  it('skips both dead and safe when skipSafe=true', () => {
+    expect(getNextAlivePlayerIndex([alive, dead, safe, alive], 0, true)).toBe(3)
+  })
+
+  it('returns null when all remaining are dead or safe (skipSafe=true)', () => {
+    expect(getNextAlivePlayerIndex([alive, safe, safe], 0, true)).toBeNull()
+  })
+
+  it('handles single-player array', () => {
+    expect(getNextAlivePlayerIndex([alive], 0)).toBeNull()
+  })
+
+  it('correctly skips fromIndex when wrapping', () => {
+    // fromIndex=2 (last), next is index 0 (wraps)
+    expect(getNextAlivePlayerIndex([alive, dead, alive], 2)).toBe(0)
   })
 })
 

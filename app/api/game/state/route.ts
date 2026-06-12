@@ -1,22 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GameStateQuerySchema } from '@/lib/schemas'
-import { getGameState, setGameState, projectGameView } from '@/lib/redis'
-import type { GameStateResponse } from '@/lib/types'
+import { getGameState, setGameState, projectGameView, withGameLock } from '@/lib/redis'
+import { autoSkipIfInactive } from '@/lib/game-logic'
+import type { GameState, GameStateResponse } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
   try {
     // Extract and validate query parameters
     const { searchParams } = new URL(request.url)
     const playerIdParam = searchParams.get('playerId')
+    const codeParam = searchParams.get('code')
     const sinceParam = searchParams.get('since')
-    
+
     const queryParams = {
       playerId: playerIdParam,
+      code: codeParam,
       ...(sinceParam && { since: sinceParam })
     }
-    
+
     const parseResult = GameStateQuerySchema.safeParse(queryParams)
-    
+
     if (!parseResult.success) {
       return NextResponse.json(
         { error: 'Invalid request: playerId is required and must be a valid UUID' },
@@ -24,11 +27,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { playerId, since } = parseResult.data
+    const { playerId, code, since } = parseResult.data
 
     // Retrieve current game state
-    const gameState = await getGameState()
-    
+    const gameState = await getGameState(code)
+
     // Handle non-existent game gracefully
     if (!gameState) {
       const response: GameStateResponse = {
@@ -60,8 +63,8 @@ export async function GET(request: NextRequest) {
     // Update the player's lastSeenAt timestamp
     const updatedGameState = {
       ...gameState,
-      players: gameState.players.map(player => 
-        player.id === playerId 
+      players: gameState.players.map(player =>
+        player.id === playerId
           ? { ...player, lastSeenAt: Date.now() }
           : player
       ),
@@ -80,11 +83,25 @@ export async function GET(request: NextRequest) {
       // Use original state for projection
     }
 
+    // Auto-skip inactive player (non-blocking — lock failure means another poller is handling it)
+    let finalState = updatedGameState
+    try {
+      const skipped = await withGameLock(code, async () => {
+        const fresh = await getGameState(code)
+        if (!fresh) return null
+        const next = autoSkipIfInactive(fresh as GameState, Date.now())
+        if (!next) return null
+        await setGameState(next as GameState)
+        return next as GameState
+      })
+      if (skipped) finalState = skipped
+    } catch { /* lock contention — another poller handled it */ }
+
     // Use projectGameView to ensure data security
-    const projectedState = projectGameView(updatedGameState, playerId)
-    
+    const projectedState = projectGameView(finalState, playerId)
+
     const response: GameStateResponse = {
-      version: updatedGameState.version,
+      version: finalState.version,
       changed: true,
       gameState: projectedState
     }
@@ -93,7 +110,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Game state polling error:', error)
-    
+
     return NextResponse.json(
       { error: 'Failed to retrieve game state' },
       { status: 500 }

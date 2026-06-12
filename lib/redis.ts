@@ -167,7 +167,7 @@ export function projectGameView(
   // Find the requesting player
   const requestingPlayer = state.players.find(p => p.id === playerId)
 
-  // Project all players to remove private data
+  // Project all players — expose chamberIndex (not chamber array)
   const projectedPlayers = state.players.map(player => ({
     id: player.id,
     name: player.name,
@@ -177,6 +177,7 @@ export function projectGameView(
     isHost: player.isHost,
     joinedAt: player.joinedAt,
     lastSeenAt: player.lastSeenAt,
+    ...(player.chamberIndex !== undefined && { chamberIndex: player.chamberIndex }),
   }))
 
   // Reveal actual cards only during roulette (challenge resolved, cards exposed to all)
@@ -206,8 +207,6 @@ export function projectGameView(
     version: state.version,
     ...(state.joinCode !== undefined && { joinCode: state.joinCode }),
     ...(state.settings !== undefined && { settings: state.settings }),
-    // chamberIndex exposed (not chamber — that would reveal bullet position)
-    ...(state.chamberIndex !== undefined && { chamberIndex: state.chamberIndex }),
     ...(state.rematchPlayerIds !== undefined && { rematchPlayerIds: state.rematchPlayerIds }),
   }
 }

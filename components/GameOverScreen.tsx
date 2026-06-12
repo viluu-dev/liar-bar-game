@@ -10,9 +10,10 @@ interface GameOverScreenProps {
   playerId: string
   joinCode: string
   rematchPlayerIds?: string[]
+  isHost?: boolean
 }
 
-export default function GameOverScreen({ winnerId, players, playerId, joinCode, rematchPlayerIds }: GameOverScreenProps) {
+export default function GameOverScreen({ winnerId, players, playerId, joinCode, rematchPlayerIds, isHost }: GameOverScreenProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -28,6 +29,7 @@ export default function GameOverScreen({ winnerId, players, playerId, joinCode, 
   const rematchCount = rematchPlayerIds?.length ?? 0
   const totalCount = players.length
   const hasAlreadyRequested = rematchPlayerIds?.includes(playerId) ?? false
+  const anyoneClicked = rematchCount > 0
 
   const handleRematch = async () => {
     setIsLoading(true)
@@ -55,11 +57,17 @@ export default function GameOverScreen({ winnerId, players, playerId, joinCode, 
     router.push('/')
   }
 
-  const rematchButtonLabel = hasAlreadyRequested
-    ? `Waiting… (${rematchCount}/${totalCount})`
-    : `Play Again (${rematchCount}/${totalCount})`
+  // Host: simple "Play Again" — no wait, creates lobby immediately
+  // Non-host: show count only after someone has clicked
+  const rematchButtonLabel = isHost
+    ? 'Play Again'
+    : hasAlreadyRequested
+      ? `Waiting… (${rematchCount}/${totalCount})`
+      : anyoneClicked
+        ? `Play Again (${rematchCount}/${totalCount})`
+        : 'Play Again'
 
-  const isRematchDisabled = isLoading || hasAlreadyRequested
+  const isRematchDisabled = isLoading || (!isHost && hasAlreadyRequested)
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white flex flex-col items-center justify-center px-4 py-8">

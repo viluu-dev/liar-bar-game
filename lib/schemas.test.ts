@@ -201,13 +201,15 @@ describe('API Request Schemas', () => {
 
   it('should validate start game request', () => {
     expect(() => StartGameRequestSchema.parse({
-      playerId: '550e8400-e29b-41d4-a716-446655440000'
+      playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST'
     })).not.toThrow()
   })
 
   it('should validate play cards request', () => {
     expect(() => PlayCardsRequestSchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       cardIndices: [0, 1, 2],
       declaredCard: 'ACE'
     })).not.toThrow()
@@ -216,18 +218,21 @@ describe('API Request Schemas', () => {
   it('should reject invalid card indices', () => {
     expect(() => PlayCardsRequestSchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       cardIndices: [0, 1, 2, 3, 4, 5], // Too many
       declaredCard: 'ACE'
     })).toThrow()
 
     expect(() => PlayCardsRequestSchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       cardIndices: [], // Empty array
       declaredCard: 'ACE'
     })).toThrow()
 
     expect(() => PlayCardsRequestSchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       cardIndices: [5], // Index out of range (0-4 for 5-card hand)
       declaredCard: 'ACE'
     })).toThrow()
@@ -236,28 +241,33 @@ describe('API Request Schemas', () => {
   it('should validate challenge request', () => {
     expect(() => ChallengeRequestSchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       action: 'liar'
     })).not.toThrow()
 
     expect(() => ChallengeRequestSchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST',
       action: 'believe'
     })).not.toThrow()
   })
 
   it('should validate roulette request', () => {
     expect(() => RouletteRequestSchema.parse({
-      playerId: '550e8400-e29b-41d4-a716-446655440000'
+      playerId: '550e8400-e29b-41d4-a716-446655440000',
+      joinCode: 'TEST'
     })).not.toThrow()
   })
 
   it('should validate game state query parameters', () => {
     expect(() => GameStateQuerySchema.parse({
-      playerId: '550e8400-e29b-41d4-a716-446655440000'
+      playerId: '550e8400-e29b-41d4-a716-446655440000',
+      code: 'TEST'
     })).not.toThrow()
 
     expect(() => GameStateQuerySchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      code: 'TEST',
       since: '42'
     })).not.toThrow()
   })
@@ -265,6 +275,7 @@ describe('API Request Schemas', () => {
   it('should transform and validate since parameter', () => {
     const result = GameStateQuerySchema.parse({
       playerId: '550e8400-e29b-41d4-a716-446655440000',
+      code: 'TEST',
       since: '42'
     })
     expect(result.since).toBe(42)

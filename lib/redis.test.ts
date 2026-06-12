@@ -1,0 +1,349 @@
+/**
+ * Tests for Redis client and state management utilities
+ */
+
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { Redis } from '@upstash/redis'
+import { 
+  withGameLock, 
+  getGameState, 
+  setGameState, 
+  projectGameView,
+  checkRedisHealth,
+  deleteGameState,
+  LockAcquisitionError,
+  RedisError 
+} from './redis'
+import { GameState, Card } from './schemas'
+
+// Mock Redis module
+const mockRedis = {
+  set: vi.fn(),
+  get: vi.fn(),
+  del: vi.fn(),
+  ping: vi.fn(),
+}
+
+vi.mock('@upstash/redis', () => ({
+  Redis: vi.fn(() => mockRedis)
+}))
+
+describe('Redis Client and State Management', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  describe('withGameLock', () => {
+    it('should acquire lock, execute function, and release lock', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK') // Lock acquisition
+      mockRedis.del.mockResolvedValueOnce(1) // Lock release
+      
+      const mockFn = vi.fn().mockResolvedValue('test result')
+      
+      const result = await withGameLock(mockFn)
+      
+      expect(result).toBe('test result')
+      expect(mockRedis.set).toHaveBeenCalledWith('game:lock', '1', { nx: true, ex: 5 })
+      expect(mockFn).toHaveBeenCalledOnce()
+      expect(mockRedis.del).toHaveBeenCalledWith('game:lock')
+    })
+
+    it('should throw LockAcquisitionError when lock cannot be acquired', async () => {
+      mockRedis.set.mockResolvedValueOnce(null) // Lock acquisition failed
+      
+      const mockFn = vi.fn()
+      
+      await expect(withGameLock(mockFn)).rejects.toThrow(LockAcquisitionError)
+      expect(mockFn).not.toHaveBeenCalled()
+    })
+
+    it('should release lock even if function throws', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK')
+      mockRedis.del.mockResolvedValueOnce(1)
+      
+      const mockFn = vi.fn().mockRejectedValue(new Error('Function error'))
+      
+      await expect(withGameLock(mockFn)).rejects.toThrow('Function error')
+      expect(mockRedis.del).toHaveBeenCalledWith('game:lock')
+    })
+
+    it('should handle lock release failure gracefully', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK')
+      mockRedis.del.mockRejectedValueOnce(new Error('Delete failed'))
+      
+      const mockFn = vi.fn().mockResolvedValue('result')
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      
+      const result = await withGameLock(mockFn)
+      
+      expect(result).toBe('result')
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to release game lock:', expect.any(Error))
+    })
+  })
+
+  describe('getGameState', () => {
+    it('should return null when no game state exists', async () => {
+      mockRedis.get.mockResolvedValueOnce(null)
+      
+      const result = await getGameState()
+      
+      expect(result).toBeNull()
+      expect(mockRedis.get).toHaveBeenCalledWith('game:state')
+    })
+
+    it('should return parsed game state when valid state exists', async () => {
+      const validGameState: GameState = {
+        status: 'lobby',
+        players: [],
+        deck: [],
+        tableCard: null,
+        pile: [],
+        pileCount: 0,
+        currentPlayerIndex: -1,
+        challengerIndex: null,
+        lastPlay: null,
+        roulettePlayerId: null,
+        roundNumber: 1,
+        winnerId: null,
+        version: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+      
+      mockRedis.get.mockResolvedValueOnce(validGameState)
+      
+      const result = await getGameState()
+      
+      expect(result).toEqual(validGameState)
+    })
+
+    it('should throw RedisError for invalid game state', async () => {
+      const invalidState = { invalid: 'state' }
+      mockRedis.get.mockResolvedValueOnce(invalidState)
+      
+      await expect(getGameState()).rejects.toThrow(RedisError)
+    })
+
+    it('should throw RedisError on Redis operation failure', async () => {
+      mockRedis.get.mockRejectedValueOnce(new Error('Redis error'))
+      
+      await expect(getGameState()).rejects.toThrow(RedisError)
+    })
+  })
+
+  describe('setGameState', () => {
+    const validGameState: GameState = {
+      status: 'lobby',
+      players: [],
+      deck: [],
+      tableCard: null,
+      pile: [],
+      pileCount: 0,
+      currentPlayerIndex: -1,
+      challengerIndex: null,
+      lastPlay: null,
+      roulettePlayerId: null,
+      roundNumber: 1,
+      winnerId: null,
+      version: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+
+    it('should store valid game state with TTL', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK')
+      
+      await setGameState(validGameState)
+      
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        'game:state',
+        expect.objectContaining({
+          ...validGameState,
+          updatedAt: expect.any(Number)
+        }),
+        { ex: 14400 }
+      )
+    })
+
+    it('should throw RedisError when Redis set operation fails', async () => {
+      mockRedis.set.mockResolvedValueOnce('ERROR')
+      
+      await expect(setGameState(validGameState)).rejects.toThrow(RedisError)
+    })
+
+    it('should throw RedisError on Redis operation failure', async () => {
+      mockRedis.set.mockRejectedValueOnce(new Error('Redis error'))
+      
+      await expect(setGameState(validGameState)).rejects.toThrow(RedisError)
+    })
+
+    it('should update updatedAt timestamp', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK')
+      const originalUpdatedAt = validGameState.updatedAt
+      
+      await setGameState(validGameState)
+      
+      const setCall = mockRedis.set.mock.calls[0]
+      expect(setCall[1].updatedAt).toBeGreaterThan(originalUpdatedAt)
+    })
+  })
+
+  describe('projectGameView', () => {
+    const createTestGameState = (): GameState => ({
+      status: 'playing',
+      players: [
+        {
+          id: 'player1',
+          name: 'Alice',
+          hand: ['ACE', 'KING'] as Card[],
+          isAlive: true,
+          isSafe: false,
+          isHost: true,
+          joinedAt: Date.now(),
+          lastSeenAt: Date.now(),
+        },
+        {
+          id: 'player2',
+          name: 'Bob',
+          hand: ['QUEEN', 'JOKER', 'ACE'] as Card[],
+          isAlive: true,
+          isSafe: false,
+          isHost: false,
+          joinedAt: Date.now(),
+          lastSeenAt: Date.now(),
+        }
+      ],
+      deck: ['KING', 'QUEEN'] as Card[],
+      tableCard: 'ACE',
+      pile: ['ACE', 'KING'] as Card[],
+      pileCount: 2,
+      currentPlayerIndex: 0,
+      challengerIndex: 1,
+      lastPlay: {
+        playerId: 'player1',
+        playerName: 'Alice',
+        cards: ['ACE', 'KING'] as Card[],
+        claimedCount: 2,
+        claimedCard: 'ACE',
+      },
+      roulettePlayerId: null,
+      roundNumber: 1,
+      winnerId: null,
+      version: 5,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+
+    it('should return projected game state for requesting player', () => {
+      const gameState = createTestGameState()
+      
+      const projected = projectGameView(gameState, 'player1')
+      
+      expect(projected).toEqual({
+        status: 'playing',
+        players: [
+          {
+            id: 'player1',
+            name: 'Alice',
+            handCount: 2,
+            isAlive: true,
+            isSafe: false,
+            isHost: true,
+            joinedAt: gameState.players[0].joinedAt,
+            lastSeenAt: gameState.players[0].lastSeenAt,
+          },
+          {
+            id: 'player2',
+            name: 'Bob',
+            handCount: 3,
+            isAlive: true,
+            isSafe: false,
+            isHost: false,
+            joinedAt: gameState.players[1].joinedAt,
+            lastSeenAt: gameState.players[1].lastSeenAt,
+          }
+        ],
+        myHand: ['ACE', 'KING'],
+        tableCard: 'ACE',
+        pileCount: 2,
+        currentPlayerIndex: 0,
+        challengerIndex: 1,
+        lastPlay: {
+          playerId: 'player1',
+          playerName: 'Alice',
+          claimedCount: 2,
+          claimedCard: 'ACE',
+          // cards field omitted
+        },
+        roulettePlayerId: null,
+        roundNumber: 1,
+        winnerId: null,
+        version: 5,
+      })
+    })
+
+    it('should return empty hand for non-existent player', () => {
+      const gameState = createTestGameState()
+      
+      const projected = projectGameView(gameState, 'nonexistent')
+      
+      expect(projected.myHand).toEqual([])
+    })
+
+    it('should handle null lastPlay', () => {
+      const gameState = createTestGameState()
+      gameState.lastPlay = null
+      
+      const projected = projectGameView(gameState, 'player1')
+      
+      expect(projected.lastPlay).toBeNull()
+    })
+  })
+
+  describe('checkRedisHealth', () => {
+    it('should return true when Redis responds with PONG', async () => {
+      mockRedis.ping.mockResolvedValueOnce('PONG')
+      
+      const result = await checkRedisHealth()
+      
+      expect(result).toBe(true)
+      expect(mockRedis.ping).toHaveBeenCalledOnce()
+    })
+
+    it('should return false when Redis ping fails', async () => {
+      mockRedis.ping.mockRejectedValueOnce(new Error('Connection failed'))
+      
+      const result = await checkRedisHealth()
+      
+      expect(result).toBe(false)
+    })
+
+    it('should return false when Redis responds with non-PONG', async () => {
+      mockRedis.ping.mockResolvedValueOnce('ERROR')
+      
+      const result = await checkRedisHealth()
+      
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('deleteGameState', () => {
+    it('should delete game state successfully', async () => {
+      mockRedis.del.mockResolvedValueOnce(1)
+      
+      await deleteGameState()
+      
+      expect(mockRedis.del).toHaveBeenCalledWith('game:state')
+    })
+
+    it('should throw RedisError on deletion failure', async () => {
+      mockRedis.del.mockRejectedValueOnce(new Error('Delete failed'))
+      
+      await expect(deleteGameState()).rejects.toThrow(RedisError)
+    })
+  })
+})

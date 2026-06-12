@@ -48,7 +48,8 @@ export const ProjectedLastPlaySchema = z.object({
   playerId: z.string().uuid(),
   playerName: z.string().min(1).max(50).trim(),
   claimedCount: z.number().int().min(1).max(3),
-  claimedCard: TableCardSchema
+  claimedCard: TableCardSchema,
+  cards: z.array(CardSchema).min(1).max(3).optional(),
 })
 
 // Complete game state validation schema
@@ -67,7 +68,12 @@ export const GameStateSchema = z.object({
   winnerId: z.string().uuid().nullable(),
   version: z.number().int().min(0),
   createdAt: z.number().int().positive(),
-  updatedAt: z.number().int().positive()
+  updatedAt: z.number().int().positive(),
+  joinCode: z.string().length(4).optional(),
+  settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional(),
+  chamber: z.array(z.boolean()).length(6).optional(),
+  chamberIndex: z.number().int().min(0).max(5).optional(),
+  rematchPlayerIds: z.array(z.string().uuid()).optional(),
 })
 
 // Projected game state schema for client responses
@@ -83,29 +89,45 @@ export const ProjectedGameStateSchema = z.object({
   roulettePlayerId: z.string().uuid().nullable(),
   roundNumber: z.number().int().min(1),
   winnerId: z.string().uuid().nullable(),
-  version: z.number().int().min(0)
+  version: z.number().int().min(0),
+  joinCode: z.string().length(4).optional(),
+  settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional(),
+  chamberIndex: z.number().int().min(0).max(5).optional(),
+  rematchPlayerIds: z.array(z.string().uuid()).optional(),
 })
 
 // API Request validation schemas
 
 // Create game request
 export const CreateGameRequestSchema = z.object({
-  playerName: z.string().min(1).max(50).trim()
+  playerName: z.string().min(1).max(50).trim(),
+  settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional()
 })
 
 // Join game request
 export const JoinGameRequestSchema = z.object({
-  playerName: z.string().min(1).max(50).trim()
+  playerName: z.string().min(1).max(50).trim(),
+  joinCode: z.string().optional()
 })
 
 // Start game request
 export const StartGameRequestSchema = z.object({
-  playerId: z.string().uuid()
+  playerId: z.string().uuid(),
+  joinCode: z.string().length(4),
+  bullets: z.number().int().min(1).max(6).optional()
+})
+
+// Kick player request
+export const KickPlayerRequestSchema = z.object({
+  hostId: z.string().uuid(),
+  targetId: z.string().uuid(),
+  joinCode: z.string().length(4)
 })
 
 // Play cards request
 export const PlayCardsRequestSchema = z.object({
   playerId: z.string().uuid(),
+  joinCode: z.string().length(4),
   cardIndices: z.array(z.number().int().min(0).max(4)).min(1).max(3),
   declaredCard: TableCardSchema
 })
@@ -113,17 +135,26 @@ export const PlayCardsRequestSchema = z.object({
 // Challenge request
 export const ChallengeRequestSchema = z.object({
   playerId: z.string().uuid(),
+  joinCode: z.string().length(4),
   action: z.enum(['liar', 'believe'])
 })
 
 // Roulette request
 export const RouletteRequestSchema = z.object({
-  playerId: z.string().uuid()
+  playerId: z.string().uuid(),
+  joinCode: z.string().length(4)
+})
+
+// Rematch request
+export const RematchRequestSchema = z.object({
+  playerId: z.string().uuid(),
+  joinCode: z.string().length(4)
 })
 
 // Game state polling query parameters
 export const GameStateQuerySchema = z.object({
   playerId: z.string().uuid(),
+  code: z.string().length(4),
   since: z.string().transform(Number).pipe(z.number().int().min(0)).optional()
 })
 
@@ -140,7 +171,8 @@ export const GameStateResponseSchema = z.object({
 // Game creation response
 export const GameCreateResponseSchema = z.object({
   playerId: z.string().uuid(),
-  gameVersion: z.number().int().min(0)
+  gameVersion: z.number().int().min(0),
+  joinCode: z.string().length(4).optional()
 })
 
 // Game join response
@@ -181,3 +213,5 @@ export type GameCreateResponse = z.infer<typeof GameCreateResponseSchema>
 export type GameJoinResponse = z.infer<typeof GameJoinResponseSchema>
 export type GameActionResponse = z.infer<typeof GameActionResponseSchema>
 export type RouletteResponse = z.infer<typeof RouletteResponseSchema>
+export type KickPlayerRequest = z.infer<typeof KickPlayerRequestSchema>
+export type RematchRequest = z.infer<typeof RematchRequestSchema>

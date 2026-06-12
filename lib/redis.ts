@@ -19,9 +19,9 @@ function getRedisClient(): Redis {
   return redisInstance
 }
 
-// Redis keys
-const GAME_STATE_KEY = 'game:state'
-const GAME_LOCK_KEY = 'game:lock'
+// Redis key helpers — keyed by join code
+const gameStateKey = (code: string) => `game:state:${code}`
+const gameLockKey  = (code: string) => `game:lock:${code}`
 
 // TTL constants
 const GAME_STATE_TTL = 14400 // 4 hours in seconds
@@ -50,20 +50,23 @@ export class RedisError extends Error {
 /**
  * Distributed lock wrapper function using SET NX EX pattern
  * Prevents concurrent write operations on game state
- * 
+ *
+ * @param code Join code of the game to lock on
  * @param fn Function to execute while holding the lock
  * @returns Promise resolving to the function's return value
  * @throws LockAcquisitionError if lock cannot be acquired
  */
 export async function withGameLock<T>(
+  code: string,
   fn: () => Promise<T>
 ): Promise<T> {
   const redis = getRedisClient()
   try {
-    // Attempt to acquire lock using SET NX EX pattern
-    const lockResult = await redis.set(GAME_LOCK_KEY, '1', {
-      nx: true, // Only set if key doesn't exist
-      ex: LOCK_TTL, // Expire after 5 seconds
+    const lockKey = gameLockKey(code)
+
+    const lockResult = await redis.set(lockKey, '1', {
+      nx: true,
+      ex: LOCK_TTL,
     })
 
     if (lockResult !== 'OK') {
@@ -71,15 +74,12 @@ export async function withGameLock<T>(
     }
 
     try {
-      // Execute the function while holding the lock
       const result = await fn()
       return result
     } finally {
-      // Always release the lock, even if function throws
       try {
-        await redis.del(GAME_LOCK_KEY)
+        await redis.del(lockKey)
       } catch (error) {
-        // Log but don't throw - lock will expire automatically
         console.warn('Failed to release game lock:', error)
       }
     }
@@ -93,22 +93,22 @@ export async function withGameLock<T>(
 
 /**
  * Retrieve and validate game state from Redis
- * 
+ *
+ * @param code Join code of the game to retrieve
  * @returns Promise resolving to GameState or null if no game exists
  * @throws RedisError if state exists but is invalid
  */
-export async function getGameState(): Promise<GameState | null> {
+export async function getGameState(code: string): Promise<GameState | null> {
   const redis = getRedisClient()
   try {
-    const stateJson = await redis.get(GAME_STATE_KEY)
-    
+    const stateJson = await redis.get(gameStateKey(code))
+
     if (stateJson === null) {
       return null
     }
 
-    // Parse and validate the state using Zod
     const parseResult = GameStateSchema.safeParse(stateJson)
-    
+
     if (!parseResult.success) {
       console.error('Invalid game state in Redis:', parseResult.error.issues)
       throw new RedisError('Corrupted game state detected')
@@ -125,24 +125,23 @@ export async function getGameState(): Promise<GameState | null> {
 
 /**
  * Store game state in Redis with TTL management
- * 
+ *
  * @param state Complete game state to store
  * @throws RedisError if storage operation fails
  */
 export async function setGameState(state: GameState): Promise<void> {
   const redis = getRedisClient()
   try {
-    // Validate state before storing
     const validatedState = GameStateSchema.parse(state)
-    
-    // Update the updatedAt timestamp
     validatedState.updatedAt = Date.now()
-    
-    // Store with TTL
-    const result = await redis.set(GAME_STATE_KEY, validatedState, {
-      ex: GAME_STATE_TTL
+
+    const code = validatedState.joinCode
+    if (!code) throw new RedisError('Game state must have joinCode to persist')
+
+    const result = await redis.set(gameStateKey(code), validatedState, {
+      ex: GAME_STATE_TTL,
     })
-    
+
     if (result !== 'OK') {
       throw new RedisError('Failed to store game state')
     }
@@ -156,18 +155,18 @@ export async function setGameState(state: GameState): Promise<void> {
 
 /**
  * Project game state for client consumption, stripping private data
- * 
+ *
  * @param state Complete server-side game state
  * @param playerId ID of the requesting player
  * @returns ProjectedGameState safe for client consumption
  */
 export function projectGameView(
-  state: GameState, 
+  state: GameState,
   playerId: string
 ): ProjectedGameState {
   // Find the requesting player
   const requestingPlayer = state.players.find(p => p.id === playerId)
-  
+
   // Project all players to remove private data
   const projectedPlayers = state.players.map(player => ({
     id: player.id,
@@ -180,7 +179,7 @@ export function projectGameView(
     lastSeenAt: player.lastSeenAt,
   }))
 
-  // Project last play to omit cards unless in challenge phase
+  // Reveal actual cards only during roulette (challenge resolved, cards exposed to all)
   let projectedLastPlay = null
   if (state.lastPlay) {
     projectedLastPlay = {
@@ -188,7 +187,7 @@ export function projectGameView(
       playerName: state.lastPlay.playerName,
       claimedCount: state.lastPlay.claimedCount,
       claimedCard: state.lastPlay.claimedCard,
-      // cards field omitted - only revealed during challenge resolution
+      ...(state.status === 'roulette' && { cards: state.lastPlay.cards }),
     }
   }
 
@@ -205,12 +204,17 @@ export function projectGameView(
     roundNumber: state.roundNumber,
     winnerId: state.winnerId,
     version: state.version,
+    ...(state.joinCode !== undefined && { joinCode: state.joinCode }),
+    ...(state.settings !== undefined && { settings: state.settings }),
+    // chamberIndex exposed (not chamber — that would reveal bullet position)
+    ...(state.chamberIndex !== undefined && { chamberIndex: state.chamberIndex }),
+    ...(state.rematchPlayerIds !== undefined && { rematchPlayerIds: state.rematchPlayerIds }),
   }
 }
 
 /**
  * Check if Redis connection is healthy
- * 
+ *
  * @returns Promise resolving to true if Redis is accessible
  */
 export async function checkRedisHealth(): Promise<boolean> {
@@ -226,11 +230,13 @@ export async function checkRedisHealth(): Promise<boolean> {
 
 /**
  * Delete game state (for cleanup/testing)
+ *
+ * @param code Join code of the game to delete
  */
-export async function deleteGameState(): Promise<void> {
+export async function deleteGameState(code: string): Promise<void> {
   try {
     const redis = getRedisClient()
-    await redis.del(GAME_STATE_KEY)
+    await redis.del(gameStateKey(code))
   } catch (error) {
     throw new RedisError(`Failed to delete game state: ${error instanceof Error ? error.message : String(error)}`)
   }

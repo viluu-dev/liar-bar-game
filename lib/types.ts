@@ -61,7 +61,7 @@ export interface ProjectedLastPlay {
   playerName: string
   claimedCount: number
   claimedCard: TableCard
-  // cards field omitted until challenge resolution
+  cards?: Card[] // revealed only during roulette status
 }
 /**
 
@@ -73,7 +73,7 @@ export interface GameState {
   players: Player[]
   deck: Card[]                    // Server-only, never exposed
   tableCard: TableCard | null
-  pile: Card[]                    // Server-only, never exposed  
+  pile: Card[]                    // Server-only, never exposed
   pileCount: number               // Computed from pile.length
   currentPlayerIndex: number      // Index into players[]
   challengerIndex: number | null  // Who must challenge next
@@ -84,6 +84,11 @@ export interface GameState {
   version: number                 // Monotonically increasing
   createdAt: number
   updatedAt: number
+  joinCode?: string
+  settings?: { bullets: number }
+  chamber?: boolean[]   // 6-slot array, server-only (never projected)
+  chamberIndex?: number // which slot fires next
+  rematchPlayerIds?: string[] // players who clicked "Play Again"
 }
 
 /**
@@ -103,6 +108,10 @@ export interface ProjectedGameState {
   roundNumber: number
   winnerId: string | null
   version: number
+  joinCode?: string
+  settings?: { bullets: number }
+  chamberIndex?: number
+  rematchPlayerIds?: string[] // players who clicked "Play Again"
 }
 
 /**
@@ -121,6 +130,7 @@ export interface GameStateResponse {
 export interface GameCreateResponse {
   playerId: string
   gameVersion: number
+  joinCode?: string
 }
 
 // Game join response
@@ -145,29 +155,42 @@ export interface RouletteResponse extends GameActionResponse {
 
 export interface CreateGameRequest {
   playerName: string
+  settings?: { bullets: number }
 }
 
 export interface JoinGameRequest {
   playerName: string
+  joinCode?: string
 }
 
 export interface StartGameRequest {
   playerId: string
+  joinCode: string
+  bullets?: number
+}
+
+export interface KickPlayerRequest {
+  hostId: string
+  targetId: string
+  joinCode: string
 }
 
 export interface PlayCardsRequest {
   playerId: string
+  joinCode: string
   cardIndices: number[]
   declaredCard: TableCard
 }
 
 export interface ChallengeRequest {
   playerId: string
+  joinCode: string
   action: "liar" | "believe"
 }
 
 export interface RouletteRequest {
   playerId: string
+  joinCode: string
 }
 
 /**

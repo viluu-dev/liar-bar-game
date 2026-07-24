@@ -5,6 +5,7 @@
 
 import { Redis } from '@upstash/redis'
 import { GameState, ProjectedGameState, GameStateSchema } from './schemas'
+import { publishGameUpdate } from './realtime'
 
 // Redis client factory function for testability
 let redisInstance: Redis | null = null
@@ -207,16 +208,27 @@ export async function getGameState(code: string): Promise<GameState | null> {
  * Store game state in Redis with TTL management
  *
  * @param state Complete game state to store
+ * @param options.publish Whether to broadcast a push update after the write (default true).
+ *   Pass `false` for writes that aren't a real state change other players need to see
+ *   (e.g. a heartbeat-only lastSeenAt bump) — publishing on those would create a
+ *   poll→publish→refetch→poll feedback loop.
  * @throws RedisError if storage operation fails
  */
-export async function setGameState(state: GameState): Promise<void> {
+export async function setGameState(
+  state: GameState,
+  options?: { publish?: boolean }
+): Promise<void> {
   const redis = getRedisClient()
+  let validatedState: GameState
+  let code: string
+
   try {
-    const validatedState = GameStateSchema.parse(state)
+    validatedState = GameStateSchema.parse(state)
     validatedState.updatedAt = Date.now()
 
-    const code = validatedState.joinCode
-    if (!code) throw new RedisError('Game state must have joinCode to persist')
+    const parsedCode = validatedState.joinCode
+    if (!parsedCode) throw new RedisError('Game state must have joinCode to persist')
+    code = parsedCode
 
     const result = await redis.set(gameStateKey(code), validatedState, {
       ex: GAME_STATE_TTL,
@@ -231,6 +243,17 @@ export async function setGameState(state: GameState): Promise<void> {
     }
     logRedisConnectionError(`setGameState failed (code=${state.joinCode ?? 'unknown'})`, error)
     throw new RedisError(`Failed to store game state: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  // Isolated from the write's error handling above: the Redis write already
+  // succeeded, so a publish failure — even one that violates publishGameUpdate's
+  // own "never throws" contract — must never surface as a RedisError here.
+  if (options?.publish !== false) {
+    try {
+      await publishGameUpdate(code, validatedState.version)
+    } catch (error) {
+      console.warn(`[redis] publishGameUpdate threw unexpectedly (code=${code})`, error)
+    }
   }
 }
 

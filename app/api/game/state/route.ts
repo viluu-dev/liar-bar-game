@@ -75,8 +75,10 @@ export async function GET(request: NextRequest) {
     // Store the updated state with new lastSeenAt
     // Note: We don't use withGameLock here as this is a read operation with minimal write
     // The timestamp update is not critical and doesn't need full consistency
+    // publish: false — this is a heartbeat, not a real change; publishing here would
+    // create a poll -> publish -> refetch -> poll storm across every connected client
     try {
-      await setGameState(updatedGameState)
+      await setGameState(updatedGameState, { publish: false })
     } catch (error) {
       // Log but don't fail the request if timestamp update fails
       console.warn('Failed to update lastSeenAt timestamp:', error)

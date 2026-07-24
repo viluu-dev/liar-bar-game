@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
+import { useGameChannel } from '@/lib/useGameChannel'
 import type { GameStateResponse, GameActionResponse } from '@/lib/types'
 
 async function fetchGameState(playerId: string, joinCode: string): Promise<GameStateResponse> {
@@ -31,11 +32,13 @@ export default function LobbyPage() {
     setJoinCode(savedJoinCode)
   }, [router])
 
+  useGameChannel(joinCode, playerId)
+
   const { data: gameData, error: fetchError, isLoading, mutate } = useSWR(
     playerId && joinCode ? ['gameState', playerId, joinCode] : null,
     () => fetchGameState(playerId!, joinCode!),
     {
-      refreshInterval: 2000,
+      refreshInterval: 12000,
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
       onError: (err) => {
@@ -306,7 +309,7 @@ export default function LobbyPage() {
           <div className="flex items-center justify-center space-x-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <span className="text-gray-500 text-xs">
-              Connected • Refreshing every 2 seconds
+              Connected
             </span>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import GameScreen from '@/components/GameScreen'
 import RouletteResultOverlay from '@/components/RouletteResultOverlay'
+import { useGameChannel } from '@/lib/useGameChannel'
 import type { GameStateResponse } from '@/lib/types'
 
 class NotInGameError extends Error {
@@ -43,11 +44,13 @@ export default function GamePage() {
     setJoinCode(code)
   }, [router])
 
+  useGameChannel(joinCode, playerId)
+
   const { data, error, isLoading } = useSWR(
     playerId && joinCode ? ['gameState', playerId, joinCode] : null,
     () => fetchGameState(playerId!, joinCode!),
     {
-      refreshInterval: 2000,
+      refreshInterval: 12000,
       revalidateOnFocus: true,
       revalidateOnReconnect: true,
       onSuccess: () => {

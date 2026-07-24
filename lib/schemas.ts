@@ -158,6 +158,12 @@ export const GameStateQuerySchema = z.object({
   since: z.string().transform(Number).pipe(z.number().int().min(0)).optional()
 })
 
+// Ably token request query parameters
+export const AblyTokenRequestSchema = z.object({
+  playerId: z.string().uuid(),
+  joinCode: z.string().length(4)
+})
+
 // API Response validation schemas
 
 // Game state response
@@ -208,6 +214,7 @@ export type PlayCardsRequest = z.infer<typeof PlayCardsRequestSchema>
 export type ChallengeRequest = z.infer<typeof ChallengeRequestSchema>
 export type RouletteRequest = z.infer<typeof RouletteRequestSchema>
 export type GameStateQuery = z.infer<typeof GameStateQuerySchema>
+export type AblyTokenRequest = z.infer<typeof AblyTokenRequestSchema>
 export type GameStateResponse = z.infer<typeof GameStateResponseSchema>
 export type GameCreateResponse = z.infer<typeof GameCreateResponseSchema>
 export type GameJoinResponse = z.infer<typeof GameJoinResponseSchema>

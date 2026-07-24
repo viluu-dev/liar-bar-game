@@ -42,7 +42,13 @@ A browser-based multiplayer implementation of the Liar's Bar bluffing card game.
 
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| SWR | 2.x | Client-side polling for game state | 4.2 KB gzipped (vs 11.4 KB for TanStack Query), built by Vercel, `refreshInterval` prop handles polling, automatic revalidation on tab focus (useful when player switches tabs) |
+| SWR | 2.x | Client-side data fetching + resilience fallback for game state | 4.2 KB gzipped (vs 11.4 KB for TanStack Query), built by Vercel, `refreshInterval` prop handles polling, automatic revalidation on tab focus (useful when player switches tabs). No longer the primary update mechanism — see Realtime / Push below — but kept as a ~12s fallback poll so the game stays playable if the push connection drops. |
+
+### Realtime / Push
+
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Ably (`ably` npm package) | 2.x | Push notification of game-state changes | Managed pub/sub reachable from Vercel serverless functions via a simple REST publish call (no self-hosted WebSocket server needed). Chosen over Pusher for its monthly (not daily-reset) message quota and higher free-tier connection cap (200 vs 100 concurrent connections). Server publishes a lightweight `{ version }` signal on `game:{joinCode}` after every real state change (hooked into `setGameState` in `lib/redis.ts`); clients subscribe via a scoped, short-lived token (`/api/ably-token`) and refetch the existing, already-redacted `GET /api/game/state` response on receipt. Redis remains the sole source of truth — Ably never carries game state itself, since per-player hand data must stay redacted and a channel is visible to every subscriber in that game. |
 
 ### Validation
 
@@ -75,10 +81,10 @@ A browser-based multiplayer implementation of the Liar's Bar bluffing card game.
 |------------|-------|----------------------|
 | Function execution timeout (default) | 10 seconds | All Redis reads + writes must complete in well under 10s — trivially met |
 | Function execution timeout (max) | 60 seconds | Not relevant for this game |
-| Function invocations/month | 1 million | At 2s polling × 6 players: ~1,080 invocations/session; free tier supports ~925 game sessions/month |
+| Function invocations/month | 1 million | Primary updates now arrive via Ably push, not polling; the SWR fallback poll (~12s × 6 players) uses a small fraction of the invocation budget that 2s polling used to consume |
 | Fast Data Transfer (bandwidth) | 100 GB/month | Game state JSON is tiny (<10 KB), no concern |
-| WebSockets | Not supported | Confirmed — design decision for polling is correct and required |
-| Upstash commands/month | 500K | 1,080 commands/session → ~460 sessions before limit; consider TTL cleanup to limit stale state commands |
+| WebSockets (native, Vercel Functions) | Available in public beta (June 2026) but capped at 5 min/connection on Hobby tier (30 min needs Pro/Enterprise), pinned to a single Function instance, no built-in cross-instance broadcast | Evaluated and rejected for this project — would require building a manual internal-Redis-polling relay per connection to fan out across instances, plus reconnect-every-5-minutes handling. Ably (managed pub/sub) used instead; see Technology Stack. |
+| Upstash commands/month | 500K | Heartbeat writes on every poll no longer trigger a publish (see `setGameState`'s `{ publish: false }` option), and the fallback poll interval is ~6x longer than the old 2s primary interval, so command volume is well under the old ceiling |
 
 ## Package Installation
 
@@ -96,7 +102,9 @@ A browser-based multiplayer implementation of the Liar's Bar bluffing card game.
 
 | Technology | Why Not |
 |------------|---------|
-| WebSockets / Pusher / Ably | Not supported on Vercel serverless functions. Project constraint. Polling is sufficient for a turn-based party game where players self-coordinate. |
+| Self-hosted WebSocket server (raw `ws`, Socket.io) | Incompatible with serverless's ephemeral, per-invocation processes — there's no long-lived process to hold connections open. This is the real constraint behind the old "no WebSockets" rule. It does NOT mean managed pub/sub SDKs can't be used from a route handler — Ably's SDK is used in this project (see Technology Stack) and works fine, since publishing is just an outbound HTTPS call, no different from any other API client already used here. |
+| Pusher | Considered alongside Ably for the realtime push layer; rejected in favor of Ably for its monthly (not daily-reset) message quota and higher free-tier connection cap. Not a "never use," just the runner-up. |
+| Native Vercel WebSocket (beta) | Available since June 2026 but capped at 5 min/connection on Hobby tier with no cross-instance broadcast — see Platform Constraints. Rejected for this project in favor of Ably. |
 | `@vercel/kv` | Deprecated. Vercel KV was discontinued December 2024. Use `@upstash/redis` directly. |
 | TanStack Query (React Query) | 11.4 KB gzipped vs SWR's 4.2 KB. The extra features (devtools, mutations, retry logic) are not needed here. SWR's `refreshInterval` covers polling completely. |
 | Pages Router (`pages/api/`) | Legacy. App Router is the current Next.js standard. No reason to use Pages Router for a greenfield project. |

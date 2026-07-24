@@ -14,6 +14,7 @@ import {
   LockAcquisitionError,
   RedisError
 } from './redis'
+import { publishGameUpdate } from './realtime'
 import { GameState, Card } from './schemas'
 
 // Mock Redis module
@@ -26,6 +27,12 @@ const mockRedis = {
 
 vi.mock('@upstash/redis', () => ({
   Redis: vi.fn(() => mockRedis)
+}))
+
+// Mock the Ably push layer — these tests only assert that setGameState calls
+// (or skips) the publish hook, not Ably's own behavior (see realtime.test.ts).
+vi.mock('./realtime', () => ({
+  publishGameUpdate: vi.fn(),
 }))
 
 describe('Redis Client and State Management', () => {
@@ -204,6 +211,34 @@ describe('Redis Client and State Management', () => {
       // First (and only) set call is the state
       const stateSetCall = mockRedis.set.mock.calls[0]
       expect(stateSetCall[1].updatedAt).toBeGreaterThanOrEqual(originalUpdatedAt)
+    })
+
+    it('should publish an update by default after a successful write', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK')
+
+      await setGameState(validGameState)
+
+      expect(publishGameUpdate).toHaveBeenCalledWith('ABCD', validGameState.version)
+    })
+
+    it('should skip publish when { publish: false } is passed', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK')
+
+      await setGameState(validGameState, { publish: false })
+
+      expect(publishGameUpdate).not.toHaveBeenCalled()
+    })
+
+    it('should not throw even if the publish hook rejects', async () => {
+      mockRedis.set.mockResolvedValueOnce('OK')
+      vi.mocked(publishGameUpdate).mockRejectedValueOnce(new Error('Ably unreachable'))
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      await expect(setGameState(validGameState)).resolves.toBeUndefined()
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('publishGameUpdate threw unexpectedly'),
+        expect.any(Error)
+      )
     })
   })
 

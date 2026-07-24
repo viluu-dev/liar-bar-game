@@ -9,12 +9,90 @@ import { GameState, ProjectedGameState, GameStateSchema } from './schemas'
 // Redis client factory function for testability
 let redisInstance: Redis | null = null
 
+function resolveRedisCredentials(): {
+  url: string | undefined
+  token: string | undefined
+  source: 'KV_REST_API_*' | 'UPSTASH_REDIS_REST_*' | 'none'
+} {
+  const kvUrl = process.env.KV_REST_API_URL
+  const kvToken = process.env.KV_REST_API_TOKEN
+  if (kvUrl && kvToken) {
+    return { url: kvUrl, token: kvToken, source: 'KV_REST_API_*' }
+  }
+
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (upstashUrl && upstashToken) {
+    return { url: upstashUrl, token: upstashToken, source: 'UPSTASH_REDIS_REST_*' }
+  }
+
+  return { url: undefined, token: undefined, source: 'none' }
+}
+
+function getRedisEnvDiagnostics() {
+  const { url, token, source } = resolveRedisCredentials()
+
+  let urlHost: string | null = null
+  if (url) {
+    try {
+      urlHost = new URL(url).host
+    } catch {
+      urlHost = '(invalid URL format)'
+    }
+  }
+
+  return {
+    source,
+    hasUrl: Boolean(url),
+    hasToken: Boolean(token),
+    urlHost,
+    tokenLength: token?.length ?? 0,
+    kvRestApiUrl: Boolean(process.env.KV_REST_API_URL),
+    kvRestApiToken: Boolean(process.env.KV_REST_API_TOKEN),
+    upstashRestUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL),
+    upstashRestToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN),
+  }
+}
+
+function logRedisConnectionError(context: string, error: unknown): void {
+  const errorDetails =
+    error instanceof Error
+      ? {
+          name: error.name,
+          message: error.message,
+        }
+      : { message: String(error) }
+
+  console.error(`[redis] ${context}`, {
+    ...getRedisEnvDiagnostics(),
+    error: errorDetails,
+  })
+}
+
 function getRedisClient(): Redis {
   if (!redisInstance) {
-    redisInstance = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    })
+    const diagnostics = getRedisEnvDiagnostics()
+    const { url, token, source } = resolveRedisCredentials()
+    console.log('[redis] Initializing client', diagnostics)
+
+    if (!url || !token) {
+      console.error('[redis] Missing required env vars', {
+        expected: 'KV_REST_API_URL + KV_REST_API_TOKEN (.env.development.local)',
+        fallback: 'UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN',
+        KV_REST_API_URL: diagnostics.kvRestApiUrl ? 'set' : 'MISSING',
+        KV_REST_API_TOKEN: diagnostics.kvRestApiToken ? 'set' : 'MISSING',
+        UPSTASH_REDIS_REST_URL: diagnostics.upstashRestUrl ? 'set' : 'MISSING',
+        UPSTASH_REDIS_REST_TOKEN: diagnostics.upstashRestToken ? 'set' : 'MISSING',
+      })
+    }
+
+    try {
+      redisInstance = new Redis({ url: url!, token: token! })
+      console.log('[redis] Client created', { source, urlHost: diagnostics.urlHost })
+    } catch (error) {
+      logRedisConnectionError('Failed to create client', error)
+      throw error
+    }
   }
   return redisInstance
 }
@@ -87,6 +165,7 @@ export async function withGameLock<T>(
     if (error instanceof LockAcquisitionError) {
       throw error
     }
+    logRedisConnectionError(`Lock operation failed (code=${code})`, error)
     throw new RedisError(`Lock operation failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
@@ -119,6 +198,7 @@ export async function getGameState(code: string): Promise<GameState | null> {
     if (error instanceof RedisError) {
       throw error
     }
+    logRedisConnectionError(`getGameState failed (code=${code})`, error)
     throw new RedisError(`Failed to retrieve game state: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
@@ -149,6 +229,7 @@ export async function setGameState(state: GameState): Promise<void> {
     if (error instanceof RedisError) {
       throw error
     }
+    logRedisConnectionError(`setGameState failed (code=${state.joinCode ?? 'unknown'})`, error)
     throw new RedisError(`Failed to store game state: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
@@ -217,12 +298,36 @@ export function projectGameView(
  * @returns Promise resolving to true if Redis is accessible
  */
 export async function checkRedisHealth(): Promise<boolean> {
+  const startedAt = Date.now()
+  const diagnostics = getRedisEnvDiagnostics()
+
+  console.log('[redis] Health check starting', diagnostics)
+
+  if (!diagnostics.hasUrl || !diagnostics.hasToken) {
+    console.error('[redis] Health check skipped — env not configured', {
+      source: diagnostics.source,
+      KV_REST_API_URL: diagnostics.kvRestApiUrl ? 'set' : 'MISSING',
+      KV_REST_API_TOKEN: diagnostics.kvRestApiToken ? 'set' : 'MISSING',
+      UPSTASH_REDIS_REST_URL: diagnostics.upstashRestUrl ? 'set' : 'MISSING',
+      UPSTASH_REDIS_REST_TOKEN: diagnostics.upstashRestToken ? 'set' : 'MISSING',
+    })
+    return false
+  }
+
   try {
     const redis = getRedisClient()
     const result = await redis.ping()
-    return result === 'PONG'
+    const ok = result === 'PONG'
+    console.log('[redis] Health check complete', {
+      ok,
+      result,
+      elapsedMs: Date.now() - startedAt,
+      urlHost: diagnostics.urlHost,
+    })
+    return ok
   } catch (error) {
-    console.error('Redis health check failed:', error)
+    logRedisConnectionError('Health check failed', error)
+    console.error('[redis] Health check timing', { elapsedMs: Date.now() - startedAt })
     return false
   }
 }

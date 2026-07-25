@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RouletteRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, initChamber } from '@/lib/game-logic'
+import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, initChamber, getNextAlivePlayerIndex } from '@/lib/game-logic'
 import type { RouletteResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -78,8 +78,11 @@ export async function POST(request: NextRequest) {
       const newDeck = shuffleDeck(createInitialDeck())
       const { playerHands, remainingDeck } = dealCards(newDeck, alivePlayers.length)
 
-      // First alive player takes next turn
-      const firstAliveIndex = updatedPlayers.findIndex(p => p.isAlive)
+      // The player who pulled the trigger starts the next round if they survived;
+      // otherwise the next alive player after them starts
+      const nextRoundStartIndex = eliminated
+        ? getNextAlivePlayerIndex(updatedPlayers, playerIndex, false)
+        : playerIndex
 
       // Advance loser's personal chamberIndex; re-init if all 6 used
       const nextChamberIndex = chamberIndex + 1
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
         tableCard: selectTableCard(),
         pile: [],
         pileCount: 0,
-        currentPlayerIndex: firstAliveIndex,
+        currentPlayerIndex: nextRoundStartIndex ?? updatedPlayers.findIndex(p => p.isAlive),
         challengerIndex: null,
         lastPlay: null,
         roulettePlayerId: null,

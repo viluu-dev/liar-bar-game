@@ -17,6 +17,7 @@ export default function LobbyPage() {
   const [playerId, setPlayerId] = useState<string | null>(null)
   const [joinCode, setJoinCode] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
+  const [isShuffling, setIsShuffling] = useState(false)
   const [error, setError] = useState('')
   const [pendingBullets, setPendingBullets] = useState(1)
   const [copySuccess, setCopySuccess] = useState(false)
@@ -94,6 +95,35 @@ export default function LobbyPage() {
       setError(err instanceof Error ? err.message : 'Failed to start game')
     } finally {
       setIsStarting(false)
+    }
+  }
+
+  const handleShuffleSeating = async () => {
+    if (!playerId || !joinCode) return
+
+    setIsShuffling(true)
+    setError('')
+
+    try {
+      const response = await fetch('/api/game/shuffle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerId, joinCode }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to shuffle seating')
+      }
+
+      const result: GameActionResponse = await response.json()
+      if (!result.success) throw new Error('Failed to shuffle seating')
+
+      mutate()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to shuffle seating')
+    } finally {
+      setIsShuffling(false)
     }
   }
 
@@ -204,7 +234,18 @@ export default function LobbyPage() {
         </div>
 
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-lg font-semibold text-white mb-3">Players in Lobby</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-lg font-semibold text-white">Players in Lobby</h3>
+            {isHost && playerCount >= 2 && (
+              <button
+                onClick={handleShuffleSeating}
+                disabled={isShuffling || isStarting}
+                className="min-h-[44px] px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-200 text-sm rounded-lg transition-colors"
+              >
+                {isShuffling ? 'Shuffling...' : 'Shuffle Seats'}
+              </button>
+            )}
+          </div>
           <div className="space-y-2">
             {players.map((player, index) => (
               <div

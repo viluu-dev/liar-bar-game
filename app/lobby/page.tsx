@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { useGameChannel } from '@/lib/useGameChannel'
+import HelpButton from '@/components/HelpButton'
 import type { GameStateResponse, GameActionResponse } from '@/lib/types'
 
 async function fetchGameState(playerId: string, joinCode: string): Promise<GameStateResponse> {
@@ -130,6 +131,7 @@ export default function LobbyPage() {
   if (!playerId || isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4">
+        <HelpButton />
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto mb-4"></div>
           <p className="text-gray-300">Loading lobby...</p>
@@ -141,6 +143,7 @@ export default function LobbyPage() {
   if (fetchError || !gameData?.gameState) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4">
+        <HelpButton />
         <div className="text-center">
           <h1 className="text-3xl font-bold text-red-500 mb-4">Connection Error</h1>
           <p className="text-gray-300 mb-4">
@@ -163,6 +166,7 @@ export default function LobbyPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+      <HelpButton playerCount={playerCount} bullets={pendingBullets} />
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-red-500 mb-2">Game Lobby</h1>

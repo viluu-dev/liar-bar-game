@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import HelpButton from '@/components/HelpButton'
 
 function LandingPageInner() {
   const [playerName, setPlayerName] = useState('')
@@ -134,6 +135,7 @@ function LandingPageInner() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
+      <HelpButton />
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-red-500 mb-2">Liar's Bar</h1>

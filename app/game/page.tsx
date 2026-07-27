@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import GameScreen from '@/components/GameScreen'
+import HelpButton from '@/components/HelpButton'
 import RouletteResultOverlay from '@/components/RouletteResultOverlay'
 import { useGameChannel } from '@/lib/useGameChannel'
 import type { GameStateResponse } from '@/lib/types'
@@ -110,6 +111,7 @@ export default function GamePage() {
   if (!playerId || !joinCode || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <HelpButton />
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-400 mx-auto mb-4" />
           <p className="text-gray-400 text-sm">Loading game…</p>
@@ -121,6 +123,7 @@ export default function GamePage() {
   if (error && !data) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
+        <HelpButton />
         <div className="text-center space-y-4">
           <p className="text-red-400 font-semibold">Connection failed</p>
           <button
@@ -138,6 +141,10 @@ export default function GamePage() {
 
   return (
     <div className="relative">
+      <HelpButton
+        playerCount={data.gameState.players.length}
+        bullets={data.gameState.settings?.bullets}
+      />
       {isReconnecting && (
         <div className="fixed top-0 inset-x-0 z-50 bg-yellow-600 text-black text-center text-xs font-semibold py-1">
           Reconnecting…

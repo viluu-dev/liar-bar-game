@@ -151,6 +151,12 @@ export const RematchRequestSchema = z.object({
   joinCode: z.string().length(4)
 })
 
+// Shuffle seating request
+export const ShuffleRequestSchema = z.object({
+  playerId: z.string().uuid(),
+  joinCode: z.string().length(4)
+})
+
 // Game state polling query parameters
 export const GameStateQuerySchema = z.object({
   playerId: z.string().uuid(),
@@ -222,3 +228,4 @@ export type GameActionResponse = z.infer<typeof GameActionResponseSchema>
 export type RouletteResponse = z.infer<typeof RouletteResponseSchema>
 export type KickPlayerRequest = z.infer<typeof KickPlayerRequestSchema>
 export type RematchRequest = z.infer<typeof RematchRequestSchema>
+export type ShuffleRequest = z.infer<typeof ShuffleRequestSchema>

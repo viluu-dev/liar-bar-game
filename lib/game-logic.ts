@@ -38,6 +38,23 @@ export function createInitialDeck(): Card[] {
 }
 
 /**
+ * Fisher-Yates shuffle for any array. Uses crypto.getRandomValues for true randomness.
+ * Does not mutate the original array.
+ */
+export function shuffleArray<T>(items: T[]): T[] {
+  const shuffled = [...items]
+
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const randomArray = new Uint32Array(1)
+    crypto.getRandomValues(randomArray)
+    const j = randomArray[0] % (i + 1)
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+
+  return shuffled
+}
+
+/**
  * Shuffles a deck using the Fisher-Yates algorithm
  * Uses crypto.getRandomValues for true randomness
  * 
@@ -47,21 +64,7 @@ export function createInitialDeck(): Card[] {
  * @returns New shuffled array (does not mutate original)
  */
 export function shuffleDeck(deck: Card[]): Card[] {
-  // Create a copy to avoid mutating the original
-  const shuffled = [...deck]
-  
-  // Fisher-Yates shuffle algorithm
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    // Generate cryptographically secure random index
-    const randomArray = new Uint32Array(1)
-    crypto.getRandomValues(randomArray)
-    const j = randomArray[0] % (i + 1)
-    
-    // Swap elements
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
-  }
-  
-  return shuffled
+  return shuffleArray(deck)
 }
 
 /**

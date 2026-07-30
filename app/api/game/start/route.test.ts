@@ -17,7 +17,7 @@ vi.mock('@/lib/redis', () => ({
 }))
 
 vi.mock('@/lib/game-logic', () => ({
-  createInitialDeck: vi.fn(() => [
+  createDeckForPlayerCount: vi.fn(() => [
     'ACE', 'ACE', 'ACE', 'ACE', 'ACE', 'ACE',
     'KING', 'KING', 'KING', 'KING', 'KING', 'KING',
     'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN',

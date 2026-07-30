@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import { MAX_PLAYERS } from './constants'
 
 // Card type schemas
 export const CardSchema = z.enum(['ACE', 'KING', 'QUEEN', 'JOKER'])
@@ -58,7 +59,7 @@ export const ProjectedLastPlaySchema = z.object({
 // Complete game state validation schema
 export const GameStateSchema = z.object({
   status: GameStatusSchema,
-  players: z.array(PlayerSchema).min(0).max(6),
+  players: z.array(PlayerSchema).min(0).max(MAX_PLAYERS),
   deck: z.array(CardSchema),
   tableCard: TableCardSchema.nullable(),
   pile: z.array(CardSchema),
@@ -80,7 +81,7 @@ export const GameStateSchema = z.object({
 // Projected game state schema for client responses
 export const ProjectedGameStateSchema = z.object({
   status: GameStatusSchema,
-  players: z.array(ProjectedPlayerSchema).min(0).max(6),
+  players: z.array(ProjectedPlayerSchema).min(0).max(MAX_PLAYERS),
   myHand: z.array(CardSchema).max(5),
   tableCard: TableCardSchema.nullable(),
   pileCount: z.number().int().min(0),

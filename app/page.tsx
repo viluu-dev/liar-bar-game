@@ -145,7 +145,7 @@ function LandingPageInner() {
         <div className="bg-gray-800 rounded-lg p-6 space-y-3">
           <h2 className="text-xl font-semibold text-white mb-3">How to Play</h2>
           <ul className="text-gray-300 space-y-2 text-sm">
-            <li>• 2-6 players take turns playing cards face-down</li>
+            <li>• 2-8 players take turns playing cards face-down</li>
             <li>• Claim your cards match the Table Card</li>
             <li>• Call "Liar!" if you think someone is bluffing</li>
             <li>• Lose a challenge? Face the Russian Roulette...</li>

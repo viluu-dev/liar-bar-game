@@ -4,37 +4,46 @@
  */
 
 import { Card, TableCard, DealResult, ChallengeResult } from './types'
+import { MIN_PLAYERS, MAX_PLAYERS } from './constants'
 
 /**
- * Creates the initial 20-card deck for Liar's Bar
+ * Returns the per-rank card counts for a deck sized for `playerCount` players.
+ * Preserves the same Ace:King:Queen:Joker ratio (3:3:3:1) as the original
+ * 4-player deck (6/6/6/2) at every table size, scaling up or down so each
+ * player can always be dealt a 5-card hand with a small (0-2 card) surplus.
+ */
+export function getDeckComposition(playerCount: number): { card: Card; count: number }[] {
+  const perRank = Math.round(playerCount * 1.5)
+  const jokers = Math.round(playerCount * 0.5)
+  return [
+    { card: 'ACE', count: perRank },
+    { card: 'KING', count: perRank },
+    { card: 'QUEEN', count: perRank },
+    { card: 'JOKER', count: jokers },
+  ]
+}
+
+/**
+ * Creates a deck scaled for `playerCount` players (see getDeckComposition).
+ */
+export function createDeckForPlayerCount(playerCount: number): Card[] {
+  const deck: Card[] = []
+  for (const { card, count } of getDeckComposition(playerCount)) {
+    for (let i = 0; i < count; i++) {
+      deck.push(card)
+    }
+  }
+  return deck
+}
+
+/**
+ * Creates the canonical 4-player, 20-card deck for Liar's Bar
  * Contains: 6 Aces, 6 Kings, 6 Queens, 2 Jokers
- * 
+ *
  * Requirements: 3.1 - Game shall shuffle a 20-card deck and deal 5 cards to each player
  */
 export function createInitialDeck(): Card[] {
-  const deck: Card[] = []
-  
-  // Add 6 Aces
-  for (let i = 0; i < 6; i++) {
-    deck.push('ACE')
-  }
-  
-  // Add 6 Kings
-  for (let i = 0; i < 6; i++) {
-    deck.push('KING')
-  }
-  
-  // Add 6 Queens
-  for (let i = 0; i < 6; i++) {
-    deck.push('QUEEN')
-  }
-  
-  // Add 2 Jokers
-  for (let i = 0; i < 2; i++) {
-    deck.push('JOKER')
-  }
-  
-  return deck
+  return createDeckForPlayerCount(4)
 }
 
 /**
@@ -73,12 +82,12 @@ export function shuffleDeck(deck: Card[]): Card[] {
  * Requirements: 3.1 - Deal 5 cards to each player
  * 
  * @param deck Shuffled deck to deal from
- * @param playerCount Number of players (2-6)
+ * @param playerCount Number of players (2-8)
  * @returns Object containing player hands and remaining deck
  */
 export function dealCards(deck: Card[], playerCount: number): DealResult {
-  if (playerCount < 2 || playerCount > 6) {
-    throw new Error('Player count must be between 2 and 6')
+  if (playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
+    throw new Error(`Player count must be between ${MIN_PLAYERS} and ${MAX_PLAYERS}`)
   }
   
   if (deck.length < playerCount * 5) {

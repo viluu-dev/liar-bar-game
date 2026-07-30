@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { useGameChannel } from '@/lib/useGameChannel'
 import HelpButton from '@/components/HelpButton'
+import { MIN_PLAYERS, MAX_PLAYERS } from '@/lib/constants'
 import type { GameStateResponse, GameActionResponse } from '@/lib/types'
 
 async function fetchGameState(playerId: string, joinCode: string): Promise<GameStateResponse> {
@@ -192,7 +193,7 @@ export default function LobbyPage() {
   const currentPlayer = players.find(p => p.id === playerId)
   const isHost = currentPlayer?.isHost ?? false
   const playerCount = players.length
-  const canStartGame = isHost && playerCount >= 2 && !isStarting
+  const canStartGame = isHost && playerCount >= MIN_PLAYERS && !isStarting
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
@@ -223,12 +224,12 @@ export default function LobbyPage() {
 
         <div className="bg-gray-800 rounded-lg p-4 text-center">
           <h2 className="text-xl font-semibold text-white mb-2">
-            Players ({playerCount}/6)
+            Players ({playerCount}/{MAX_PLAYERS})
           </h2>
           <p className="text-gray-400 text-sm">
-            {playerCount < 2
-              ? 'Need at least 2 players to start'
-              : `${6 - playerCount} more players can join`
+            {playerCount < MIN_PLAYERS
+              ? `Need at least ${MIN_PLAYERS} players to start`
+              : `${MAX_PLAYERS - playerCount} more players can join`
             }
           </p>
         </div>
@@ -322,13 +323,13 @@ export default function LobbyPage() {
             >
               {isStarting
                 ? 'Starting Game...'
-                : playerCount < 2
-                  ? 'Need at least 2 players'
+                : playerCount < MIN_PLAYERS
+                  ? `Need at least ${MIN_PLAYERS} players`
                   : 'Start Game'
               }
             </button>
 
-            {playerCount < 2 && (
+            {playerCount < MIN_PLAYERS && (
               <p className="text-center text-gray-500 text-sm">
                 Ask friends to join using the code above
               </p>

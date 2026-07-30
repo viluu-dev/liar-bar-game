@@ -384,7 +384,7 @@ Players who don't poll/act within 90 seconds:
 
 **Redis Command Budget**
 - Monitor commands/session to validate free tier usage
-- Load testing with 6 concurrent players
+- Load testing with 8 concurrent players
 - Polling frequency optimization
 - TTL cleanup verification
 

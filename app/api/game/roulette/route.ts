@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RouletteRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, initChamber, getNextAlivePlayerIndex } from '@/lib/game-logic'
+import { createDeckForPlayerCount, shuffleDeck, dealCards, selectTableCard, initChamber, getNextAlivePlayerIndex } from '@/lib/game-logic'
 import type { RouletteResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Round reset — reshuffle and deal new hands to all alive players
-      const newDeck = shuffleDeck(createInitialDeck())
+      const newDeck = shuffleDeck(createDeckForPlayerCount(alivePlayers.length))
       const { playerHands, remainingDeck } = dealCards(newDeck, alivePlayers.length)
 
       // The player who pulled the trigger starts the next round if they survived;

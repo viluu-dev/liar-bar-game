@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive } from './game-logic'
+import { createInitialDeck, createDeckForPlayerCount, getDeckComposition, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive } from './game-logic'
 import type { Card, TableCard } from './types'
 
 describe('createInitialDeck', () => {
@@ -31,9 +31,52 @@ describe('createInitialDeck', () => {
   it('should return a new array each time (not cached)', () => {
     const deck1 = createInitialDeck()
     const deck2 = createInitialDeck()
-    
+
     expect(deck1).not.toBe(deck2) // Different array instances
     expect(deck1).toEqual(deck2) // Same contents
+  })
+})
+
+describe('getDeckComposition / createDeckForPlayerCount', () => {
+  it('matches the canonical 6/6/6/2 composition at 4 players', () => {
+    const composition = getDeckComposition(4)
+    const counts = Object.fromEntries(composition.map(c => [c.card, c.count]))
+
+    expect(counts.ACE).toBe(6)
+    expect(counts.KING).toBe(6)
+    expect(counts.QUEEN).toBe(6)
+    expect(counts.JOKER).toBe(2)
+    expect(createDeckForPlayerCount(4)).toHaveLength(20)
+  })
+
+  it('never produces a deck smaller than 5 cards per player, for every supported player count', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      const deck = createDeckForPlayerCount(playerCount)
+      const surplus = deck.length - playerCount * 5
+
+      expect(deck.length).toBeGreaterThanOrEqual(playerCount * 5)
+      expect([0, 2]).toContain(surplus)
+    }
+  })
+
+  it('keeps Ace, King, and Queen counts equal at every player count (preserves ratio)', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      const composition = getDeckComposition(playerCount)
+      const counts = Object.fromEntries(composition.map(c => [c.card, c.count]))
+
+      expect(counts.ACE).toBe(counts.KING)
+      expect(counts.KING).toBe(counts.QUEEN)
+      expect(counts.JOKER).toBeLessThan(counts.ACE)
+    }
+  })
+
+  it('createDeckForPlayerCount total length matches the sum of getDeckComposition counts', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      const composition = getDeckComposition(playerCount)
+      const total = composition.reduce((sum, c) => sum + c.count, 0)
+
+      expect(createDeckForPlayerCount(playerCount)).toHaveLength(total)
+    }
   })
 })
 
@@ -153,36 +196,40 @@ describe('dealCards', () => {
 
   it('should throw error for invalid player count', () => {
     const deck = createInitialDeck()
-    
-    expect(() => dealCards(deck, 1)).toThrow('Player count must be between 2 and 6')
-    expect(() => dealCards(deck, 7)).toThrow('Player count must be between 2 and 6')
-    expect(() => dealCards(deck, 0)).toThrow('Player count must be between 2 and 6')
-    expect(() => dealCards(deck, -1)).toThrow('Player count must be between 2 and 6')
+
+    expect(() => dealCards(deck, 1)).toThrow('Player count must be between 2 and 8')
+    expect(() => dealCards(deck, 9)).toThrow('Player count must be between 2 and 8')
+    expect(() => dealCards(deck, 0)).toThrow('Player count must be between 2 and 8')
+    expect(() => dealCards(deck, -1)).toThrow('Player count must be between 2 and 8')
   })
 
   it('should throw error if not enough cards in deck', () => {
     const smallDeck: Card[] = ['ACE', 'KING', 'QUEEN'] // Only 3 cards
-    
+
     expect(() => dealCards(smallDeck, 2)).toThrow('Not enough cards in deck to deal 5 cards per player')
   })
 
-  it('should handle maximum 6 players with enough cards', () => {
-    // Create a larger deck to test 6 players scenario  
-    const largeDeck: Card[] = new Array(30).fill('ACE') as Card[] // 30 cards for 6 players
-    const result = dealCards(largeDeck, 6) // 6 * 5 = 30 cards
-    
-    expect(result.playerHands).toHaveLength(6)
+  it('should handle maximum 8 players with enough cards', () => {
+    // Create a larger deck to test 8 players scenario
+    const largeDeck: Card[] = new Array(40).fill('ACE') as Card[] // 40 cards for 8 players
+    const result = dealCards(largeDeck, 8) // 8 * 5 = 40 cards
+
+    expect(result.playerHands).toHaveLength(8)
     expect(result.remainingDeck).toHaveLength(0)
     result.playerHands.forEach(hand => {
       expect(hand).toHaveLength(5)
     })
   })
 
-  it('should fail with 6 players and standard 20-card deck', () => {
-    const deck = createInitialDeck() // Only 20 cards
-    
-    // This should throw because we need 30 cards but only have 20
-    expect(() => dealCards(deck, 6)).toThrow('Not enough cards in deck to deal 5 cards per player')
+  it('should succeed with 6 players using a deck scaled for 6 players', () => {
+    const deck = createDeckForPlayerCount(6) // 30 cards, scaled for 6 players
+
+    const result = dealCards(deck, 6)
+    expect(result.playerHands).toHaveLength(6)
+    expect(result.remainingDeck).toHaveLength(0)
+    result.playerHands.forEach(hand => {
+      expect(hand).toHaveLength(5)
+    })
   })
 
   it('should work with exactly enough cards', () => {

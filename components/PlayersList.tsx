@@ -1,6 +1,7 @@
 'use client'
 
 import { ProjectedPlayer } from '@/lib/types'
+import { MAX_PLAYERS } from '@/lib/constants'
 import ChamberDots from './ChamberDots'
 
 interface PlayersListProps {
@@ -17,7 +18,7 @@ export default function PlayersList({
   return (
     <div className="h-full flex flex-col">
       <div className="text-center text-sm text-gray-400 mb-4 shrink-0">
-        Players ({players.length}/6)
+        Players ({players.length}/{MAX_PLAYERS})
       </div>
       
       <div className="flex-1 space-y-3 overflow-y-auto">

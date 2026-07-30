@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { StartGameRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, initChamber } from '@/lib/game-logic'
+import { createDeckForPlayerCount, shuffleDeck, dealCards, selectTableCard, initChamber } from '@/lib/game-logic'
+import { MIN_PLAYERS } from '@/lib/constants'
 import type { GameActionResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -45,12 +46,12 @@ export async function POST(request: NextRequest) {
       }
 
       // Validate minimum player count
-      if (gameState.players.length < 2) {
-        throw new Error('At least 2 players are required to start the game')
+      if (gameState.players.length < MIN_PLAYERS) {
+        throw new Error(`At least ${MIN_PLAYERS} players are required to start the game`)
       }
 
-      // Create and shuffle the deck
-      const initialDeck = createInitialDeck()
+      // Create and shuffle the deck, scaled for the current player count
+      const initialDeck = createDeckForPlayerCount(gameState.players.length)
       const shuffledDeck = shuffleDeck(initialDeck)
 
       // Deal 5 cards to each player

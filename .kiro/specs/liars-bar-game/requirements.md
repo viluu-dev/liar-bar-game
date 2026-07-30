@@ -2,9 +2,9 @@
 
 ## Introduction
 
-Liar's Bar is a browser-based multiplayer bluffing card game where 2-6 players join from their own devices to play a high-stakes game. The core experience revolves around the tension of calling "Liar!" and the Russian Roulette consequence that follows. Players take turns playing cards face-down while claiming they are a specific type, and other players must decide whether to believe them or challenge with potentially lethal consequences.
+Liar's Bar is a browser-based multiplayer bluffing card game where 2-8 players join from their own devices to play a high-stakes game. The core experience revolves around the tension of calling "Liar!" and the Russian Roulette consequence that follows. Players take turns playing cards face-down while claiming they are a specific type, and other players must decide whether to believe them or challenge with potentially lethal consequences.
 
-The game uses a specialized 20-card deck (6 Aces, 6 Kings, 6 Queens, 2 Jokers) and features a Table Card system where all plays must be declared as the current round's designated card type. The emotional climax is the roulette moment - when a player loses a challenge, they must pull a virtual trigger with a 1-in-6 chance of elimination.
+The game uses a deck that scales with the number of players (6 Aces, 6 Kings, 6 Queens, 2 Jokers — 20 cards — at the reference 4-player table size, preserving the same ~3:3:3:1 ratio at other table sizes) and features a Table Card system where all plays must be declared as the current round's designated card type. The emotional climax is the roulette moment - when a player loses a challenge, they must pull a virtual trigger with a 1-in-6 chance of elimination.
 
 ## Requirements
 
@@ -29,7 +29,7 @@ The game uses a specialized 20-card deck (6 Aces, 6 Kings, 6 Queens, 2 Jokers) a
 1. WHEN players join a game session THEN all players SHALL see a live-updating lobby with all joined player names
 2. WHEN fewer than 2 players are in the lobby THEN the host SHALL see a disabled "Start Game" button with explanatory text
 3. WHEN 2 or more players are in the lobby THEN the host SHALL see an enabled "Start Game" button
-4. WHEN more than 6 players attempt to join THEN the system SHALL reject the join attempt with an error message
+4. WHEN more than 8 players attempt to join THEN the system SHALL reject the join attempt with an error message
 5. WHEN the lobby updates THEN all player screens SHALL refresh within 2 seconds via polling
 
 ### Requirement 3: Game Setup and Card Dealing
@@ -38,7 +38,7 @@ The game uses a specialized 20-card deck (6 Aces, 6 Kings, 6 Queens, 2 Jokers) a
 
 #### Acceptance Criteria
 
-1. WHEN the host starts a game THEN the system SHALL shuffle a 20-card deck (6 Aces, 6 Kings, 6 Queens, 2 Jokers) and deal 5 cards to each player
+1. WHEN the host starts a game THEN the system SHALL shuffle a deck sized for the player count (6 Aces, 6 Kings, 6 Queens, 2 Jokers at 4 players; scaled proportionally at other table sizes) and deal 5 cards to each player
 2. WHEN a round begins THEN the system SHALL randomly select and display a Table Card (Ace, King, or Queen) that is the same for all players
 3. WHEN cards are dealt THEN each player SHALL only see their own 5-card hand
 4. WHEN viewing other players THEN each player SHALL see only the card count (not the actual cards) for opponents

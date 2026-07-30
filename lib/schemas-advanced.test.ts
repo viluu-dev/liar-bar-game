@@ -63,10 +63,10 @@ describe('GameStateSchema', () => {
     expect(() => GameStateSchema.parse(validGameState)).not.toThrow()
   })
 
-  it('should enforce maximum 6 players', () => {
+  it('should enforce maximum 8 players', () => {
     const tooManyPlayers = {
       ...validGameState,
-      players: Array(7).fill(validGameState.players[0])
+      players: Array(9).fill(validGameState.players[0])
     }
     expect(() => GameStateSchema.parse(tooManyPlayers)).toThrow()
   })

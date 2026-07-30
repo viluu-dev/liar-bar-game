@@ -57,7 +57,7 @@ This directory contains Zod validation schemas and utilities for the Liar's Bar 
 - Enforced by `z.string().uuid()`
 
 ### Game State Constraints
-- Maximum 6 players per game
+- Maximum 8 players per game
 - Minimum 1 round number
 - Non-negative pile counts and hand counts
 - Current player index allows -1 (no active player)

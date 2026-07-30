@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { JoinGameRequestSchema } from '@/lib/schemas'
 import { withGameLock, setGameState, getGameState } from '@/lib/redis'
+import { MAX_PLAYERS } from '@/lib/constants'
 import type { Player } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -44,9 +45,9 @@ export async function POST(request: NextRequest) {
         throw new Error('Invalid join code')
       }
 
-      // Enforce 6-player maximum limit
-      if (gameState.players.length >= 6) {
-        throw new Error('Game is full (maximum 6 players)')
+      // Enforce player maximum limit
+      if (gameState.players.length >= MAX_PLAYERS) {
+        throw new Error(`Game is full (maximum ${MAX_PLAYERS} players)`)
       }
 
       // Check for duplicate names (optional but good UX)
@@ -108,9 +109,9 @@ export async function POST(request: NextRequest) {
             { error: 'Cannot join game - it has already started.' },
             { status: 409 }
           )
-        case 'Game is full (maximum 6 players)':
+        case `Game is full (maximum ${MAX_PLAYERS} players)`:
           return NextResponse.json(
-            { error: 'Cannot join game - maximum of 6 players allowed.' },
+            { error: `Cannot join game - maximum of ${MAX_PLAYERS} players allowed.` },
             { status: 409 }
           )
         case 'A player with that name has already joined':

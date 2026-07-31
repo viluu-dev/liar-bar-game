@@ -160,12 +160,12 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
           />
         ) : gameState.status === 'roulette' &&
           gameState.lastPlay?.cards &&
-          gameState.roulettePlayerId &&
+          gameState.roulettePlayerIds.length > 0 &&
           gameState.tableCard ? (
           <ChallengeReveal
             lastPlay={gameState.lastPlay as typeof gameState.lastPlay & { cards: NonNullable<typeof gameState.lastPlay.cards> }}
             tableCard={gameState.tableCard}
-            loser={gameState.players.find(p => p.id === gameState.roulettePlayerId)!}
+            pendingShooters={gameState.players.filter(p => gameState.roulettePlayerIds.includes(p.id))}
             players={gameState.players}
             playerId={playerId}
             onRoulette={handleRoulette}

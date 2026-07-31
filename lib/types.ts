@@ -4,11 +4,17 @@
  */
 
 // Card type definitions
-export type Card = 'ACE' | 'KING' | 'QUEEN' | 'JOKER'
+export type Card = 'ACE' | 'KING' | 'QUEEN' | 'JOKER' | 'DEVIL'
 export type TableCard = 'ACE' | 'KING' | 'QUEEN' // No Jokers as table cards
 
 // Game status enum for state machine
 export type GameStatus = 'lobby' | 'playing' | 'challenge' | 'roulette' | 'finished'
+
+// Game settings shared by create/start requests and persisted game state
+export interface GameSettings {
+  bullets: number
+  devilMode?: boolean
+}
 
 /**
  * Player interface - complete server-side player state
@@ -81,14 +87,14 @@ export interface GameState {
   currentPlayerIndex: number      // Index into players[]
   challengerIndex: number | null  // Who must challenge next
   lastPlay: LastPlay | null
-  roulettePlayerId: string | null // Challenge loser
+  roulettePlayerIds: string[]     // Pending trigger-pullers (challenge loser, or every player but one on a Devil mass penalty)
   roundNumber: number
   winnerId: string | null
   version: number                 // Monotonically increasing
   createdAt: number
   updatedAt: number
   joinCode?: string
-  settings?: { bullets: number }
+  settings?: GameSettings
   rematchPlayerIds?: string[] // players who clicked "Play Again"
 }
 
@@ -105,12 +111,12 @@ export interface ProjectedGameState {
   currentPlayerIndex: number
   challengerIndex: number | null
   lastPlay: ProjectedLastPlay | null
-  roulettePlayerId: string | null
+  roulettePlayerIds: string[]
   roundNumber: number
   winnerId: string | null
   version: number
   joinCode?: string
-  settings?: { bullets: number }
+  settings?: GameSettings
   rematchPlayerIds?: string[] // players who clicked "Play Again"
 }
 
@@ -155,7 +161,7 @@ export interface RouletteResponse extends GameActionResponse {
 
 export interface CreateGameRequest {
   playerName: string
-  settings?: { bullets: number }
+  settings?: GameSettings
 }
 
 export interface JoinGameRequest {
@@ -167,6 +173,7 @@ export interface StartGameRequest {
   playerId: string
   joinCode: string
   bullets?: number
+  devilMode?: boolean
 }
 
 export interface KickPlayerRequest {

@@ -60,7 +60,7 @@ function createTestGameState(): GameState {
     currentPlayerIndex: 0,
     challengerIndex: 1,
     lastPlay,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 2,
     winnerId: null,
     version: 15,
@@ -193,7 +193,7 @@ describe('projectGameView', () => {
       expect(projection.tableCard).toBe('KING')
       expect(projection.currentPlayerIndex).toBe(0)
       expect(projection.challengerIndex).toBe(1)
-      expect(projection.roulettePlayerId).toBeNull()
+      expect(projection.roulettePlayerIds).toEqual([])
       expect(projection.roundNumber).toBe(2)
       expect(projection.winnerId).toBeNull()
       expect(projection.version).toBe(15)
@@ -261,7 +261,7 @@ describe('projectGameView', () => {
       gameState.tableCard = null
       gameState.challengerIndex = null
       gameState.lastPlay = null
-      gameState.roulettePlayerId = null
+      gameState.roulettePlayerIds = []
       gameState.winnerId = null
       
       const projection = projectGameView(gameState, 'player-1-uuid')
@@ -269,7 +269,7 @@ describe('projectGameView', () => {
       expect(projection.tableCard).toBeNull()
       expect(projection.challengerIndex).toBeNull()
       expect(projection.lastPlay).toBeNull()
-      expect(projection.roulettePlayerId).toBeNull()
+      expect(projection.roulettePlayerIds).toEqual([])
       expect(projection.winnerId).toBeNull()
     })
   })

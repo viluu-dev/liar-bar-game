@@ -56,7 +56,7 @@ describe('/api/game/roulette', () => {
     currentPlayerIndex: 0,
     challengerIndex: null,
     lastPlay: { playerId: PLAYER2_UUID, playerName: 'Bob', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE' },
-    roulettePlayerId: LOSER_UUID,
+    roulettePlayerIds: [LOSER_UUID],
     roundNumber: 2,
     winnerId: null,
     version: 8,
@@ -88,7 +88,7 @@ describe('/api/game/roulette', () => {
           pile: [],
           pileCount: 0,
           lastPlay: null,
-          roulettePlayerId: null,
+          roulettePlayerIds: [],
           roundNumber: 3,
           challengerIndex: null,
         })
@@ -188,6 +188,98 @@ describe('/api/game/roulette', () => {
     })
   })
 
+  describe('Devil Card mass penalty', () => {
+    const DEVIL_UUID = '550e8400-e29b-41d4-a716-446655440010'
+    const SHOOTER1_UUID = '550e8400-e29b-41d4-a716-446655440011'
+    const SHOOTER2_UUID = '550e8400-e29b-41d4-a716-446655440012'
+
+    const makeShooter = (id: string, name: string, chamberOverride = SAFE_CHAMBER) => ({
+      id, name, hand: ['ACE', 'KING', 'QUEEN', 'JOKER', 'ACE'] as import('@/lib/types').Card[],
+      isAlive: true, isSafe: false, isHost: false, joinedAt: 1000, lastSeenAt: 1000,
+      chamber: chamberOverride, chamberIndex: 0,
+    })
+
+    const makeDevilState = (overrides: Partial<GameState> = {}): GameState => ({
+      status: 'roulette',
+      players: [
+        { id: DEVIL_UUID, name: 'Dana', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: 999, lastSeenAt: 999 },
+        makeShooter(SHOOTER1_UUID, 'Shooter1'),
+        makeShooter(SHOOTER2_UUID, 'Shooter2'),
+      ],
+      deck: [],
+      tableCard: 'ACE',
+      pile: ['DEVIL'],
+      pileCount: 1,
+      currentPlayerIndex: 0,
+      challengerIndex: null,
+      lastPlay: { playerId: DEVIL_UUID, playerName: 'Dana', cards: ['DEVIL'], claimedCount: 1, claimedCard: 'ACE' },
+      roulettePlayerIds: [SHOOTER1_UUID, SHOOTER2_UUID],
+      roundNumber: 2,
+      winnerId: null,
+      version: 8,
+      createdAt: 1000,
+      updatedAt: 1000,
+      ...overrides,
+    })
+
+    it('drains the pending queue one pull at a time without resetting the round early', async () => {
+      mockGetGameState.mockResolvedValue(makeDevilState())
+
+      const res = await POST(makeRequest({ playerId: SHOOTER1_UUID, joinCode: 'TEST' }))
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.result).toBe('safe')
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'roulette',
+          roulettePlayerIds: [SHOOTER2_UUID],
+          roundNumber: 2, // unchanged — no round reset yet, Shooter2 still pending
+        })
+      )
+    })
+
+    it('resets the round once the last pending shooter pulls, starting the next round with the Devil player', async () => {
+      const state = makeDevilState({ roulettePlayerIds: [SHOOTER2_UUID] }) // Shooter1 already resolved
+      mockGetGameState.mockResolvedValue(state)
+
+      await POST(makeRequest({ playerId: SHOOTER2_UUID, joinCode: 'TEST' }))
+
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'playing',
+          roulettePlayerIds: [],
+          currentPlayerIndex: 0, // Dana, the Devil player, starts the next round
+          roundNumber: 3,
+        })
+      )
+    })
+
+    it('ends the game immediately when the last pending shooter is eliminated, even mid Devil-round', async () => {
+      const state = makeDevilState({
+        players: [
+          { id: DEVIL_UUID, name: 'Dana', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: 999, lastSeenAt: 999 },
+          { ...makeShooter(SHOOTER1_UUID, 'Shooter1'), isAlive: false }, // already eliminated earlier this round
+          makeShooter(SHOOTER2_UUID, 'Shooter2', HIT_CHAMBER),
+        ],
+        roulettePlayerIds: [SHOOTER2_UUID],
+      })
+      mockGetGameState.mockResolvedValue(state)
+
+      const res = await POST(makeRequest({ playerId: SHOOTER2_UUID, joinCode: 'TEST' }))
+      const body = await res.json()
+
+      expect(body.result).toBe('eliminated')
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'finished',
+          roulettePlayerIds: [],
+          winnerId: DEVIL_UUID,
+        })
+      )
+    })
+  })
+
   describe('validation errors', () => {
     it('rejects missing playerId', async () => {
       const res = await POST(makeRequest({}))
@@ -207,7 +299,7 @@ describe('/api/game/roulette', () => {
       const res = await POST(makeRequest({ playerId: OTHER_UUID, joinCode: 'TEST' }))
       const body = await res.json()
       expect(res.status).toBe(400)
-      expect(body.error).toBe('Only the challenge loser can pull the trigger')
+      expect(body.error).toBe('Only a designated shooter can pull the trigger')
     })
 
     it('rejects when no game exists', async () => {

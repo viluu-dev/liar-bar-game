@@ -102,7 +102,7 @@ describe('/api/game/start', () => {
     currentPlayerIndex: -1,
     challengerIndex: null,
     lastPlay: null,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 5,

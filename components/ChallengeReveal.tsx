@@ -7,7 +7,7 @@ import ChamberDots from './ChamberDots'
 interface ChallengeRevealProps {
   lastPlay: ProjectedLastPlay & { cards: Card[] }
   tableCard: TableCard
-  loser: ProjectedPlayer
+  pendingShooters: ProjectedPlayer[]
   players: ProjectedPlayer[]
   playerId: string
   onRoulette?: () => Promise<void>
@@ -18,6 +18,7 @@ const cardSymbols: Record<Card, string> = {
   KING: '♠K',
   QUEEN: '♠Q',
   JOKER: '🃏',
+  DEVIL: '😈',
 }
 
 const cardColors: Record<Card, string> = {
@@ -25,27 +26,31 @@ const cardColors: Record<Card, string> = {
   KING: 'text-yellow-400',
   QUEEN: 'text-purple-400',
   JOKER: 'text-green-400',
+  DEVIL: 'text-red-600',
 }
 
 function isValidCard(card: Card, tableCard: TableCard): boolean {
-  return card === tableCard || card === 'JOKER'
+  return card === tableCard || card === 'JOKER' || card === 'DEVIL'
 }
 
 export default function ChallengeReveal({
   lastPlay,
   tableCard,
-  loser,
+  pendingShooters,
   players,
   playerId,
   onRoulette,
 }: ChallengeRevealProps) {
-  const chamberIndex = loser.chamberIndex
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const { playerName, claimedCount, claimedCard, cards } = lastPlay
+  const isDevilPlay = cards.length === 1 && cards[0] === 'DEVIL'
   const allValid = cards.every(c => isValidCard(c, tableCard))
-  const isLoser = loser.id === playerId
+  const me = pendingShooters.find(p => p.id === playerId)
+  const isShooter = me !== undefined
+  const chamberIndex = me?.chamberIndex
+  const waitingNames = pendingShooters.filter(p => p.id !== playerId).map(p => p.name)
   const cardLabel = (c: number) => (c === 1 ? 'card' : 'cards')
 
   const handleRoulette = async () => {
@@ -96,6 +101,11 @@ export default function ChallengeReveal({
                     wild
                   </div>
                 )}
+                {card === 'DEVIL' && (
+                  <div className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold px-1 rounded">
+                    devil
+                  </div>
+                )}
                 {!valid && (
                   <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-1 rounded">
                     ✗
@@ -110,19 +120,34 @@ export default function ChallengeReveal({
       {/* Verdict */}
       <div
         className={`rounded-xl p-4 text-center border ${
-          allValid
-            ? 'bg-green-900/30 border-green-700'
-            : 'bg-red-900/30 border-red-700'
+          isDevilPlay
+            ? 'bg-red-950/40 border-red-700'
+            : allValid
+              ? 'bg-green-900/30 border-green-700'
+              : 'bg-red-900/30 border-red-700'
         }`}
       >
-        <p className="font-bold text-lg mb-1">
-          {allValid ? '✓ Honest play!' : '✗ Caught lying!'}
-        </p>
-        <p className="text-sm text-gray-300">
-          {allValid
-            ? 'The cards were legitimate — the caller was wrong.'
-            : 'The cards did not match — the lie was exposed.'}
-        </p>
+        {isDevilPlay ? (
+          <>
+            <p className="font-bold text-lg mb-1">😈 Devil Card revealed!</p>
+            <p className="text-sm text-gray-300">
+              The challenge fails — everyone except{' '}
+              <span className="text-white font-semibold">{playerName}</span> must
+              pull the trigger.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="font-bold text-lg mb-1">
+              {allValid ? '✓ Honest play!' : '✗ Caught lying!'}
+            </p>
+            <p className="text-sm text-gray-300">
+              {allValid
+                ? 'The cards were legitimate — the caller was wrong.'
+                : 'The cards did not match — the lie was exposed.'}
+            </p>
+          </>
+        )}
       </div>
 
       {/* Roulette trigger */}
@@ -135,7 +160,7 @@ export default function ChallengeReveal({
         </div>
       )}
 
-      {isLoser ? (
+      {isShooter ? (
         <div className="space-y-2">
           <p className="text-center text-sm text-red-400 font-semibold animate-pulse">
             Your fate awaits…
@@ -168,16 +193,16 @@ export default function ChallengeReveal({
             )}
           </button>
         </div>
-      ) : (
+      ) : waitingNames.length > 0 ? (
         <div className="text-center py-2">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse inline-block mr-2" />
           <span className="text-gray-400 text-sm">
             Waiting for{' '}
-            <span className="text-white font-semibold">{loser.name}</span>{' '}
+            <span className="text-white font-semibold">{waitingNames.join(', ')}</span>{' '}
             to pull the trigger…
           </span>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

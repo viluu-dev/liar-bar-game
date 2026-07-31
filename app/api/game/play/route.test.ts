@@ -57,7 +57,7 @@ describe('/api/game/play', () => {
     currentPlayerIndex: 0,
     challengerIndex: null,
     lastPlay: null,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 3,
@@ -169,7 +169,7 @@ describe('/api/game/play', () => {
       expect(mockSetGameState).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'roulette',
-          roulettePlayerId: HOST_UUID,
+          roulettePlayerIds: [HOST_UUID],
           challengerIndex: null,
         })
       )
@@ -184,7 +184,7 @@ describe('/api/game/play', () => {
       await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
 
       expect(mockSetGameState).toHaveBeenCalledWith(
-        expect.objectContaining({ status: 'roulette', roulettePlayerId: HOST_UUID })
+        expect.objectContaining({ status: 'roulette', roulettePlayerIds: [HOST_UUID] })
       )
     })
   })
@@ -213,6 +213,38 @@ describe('/api/game/play', () => {
     it('rejects invalid declaredCard (JOKER not allowed)', async () => {
       const res = await POST(makeRequest({ playerId: HOST_UUID, cardIndices: [0], declaredCard: 'JOKER' }))
       expect(res.status).toBe(400)
+    })
+  })
+
+  describe('Devil Card', () => {
+    it('rejects playing the Devil Card combined with other cards', async () => {
+      const state = makeGameState()
+      state.players[0].hand = ['DEVIL', 'KING', 'QUEEN', 'JOKER', 'ACE']
+      mockGetGameState.mockResolvedValue(state)
+
+      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0, 1], declaredCard: 'KING' }))
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error).toBe('The Devil Card must be played alone')
+      expect(mockSetGameState).not.toHaveBeenCalled()
+    })
+
+    it('allows playing the Devil Card alone', async () => {
+      const state = makeGameState()
+      state.players[0].hand = ['DEVIL', 'KING', 'QUEEN', 'JOKER', 'ACE']
+      mockGetGameState.mockResolvedValue(state)
+      mockSetGameState.mockResolvedValue()
+
+      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+
+      expect(res.status).toBe(200)
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'challenge',
+          lastPlay: expect.objectContaining({ cards: ['DEVIL'], claimedCard: 'KING' }),
+        })
+      )
     })
   })
 

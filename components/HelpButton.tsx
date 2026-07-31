@@ -6,6 +6,7 @@ import { getDeckComposition } from '@/lib/game-logic'
 interface HelpButtonProps {
   playerCount?: number
   bullets?: number
+  devilMode?: boolean
 }
 
 const CARD_LABELS: Record<string, string> = {
@@ -13,13 +14,14 @@ const CARD_LABELS: Record<string, string> = {
   KING: 'King',
   QUEEN: 'Queen',
   JOKER: 'Joker',
+  DEVIL: 'Devil',
 }
 const CARDS_PER_HAND = 5
 
-export default function HelpButton({ playerCount, bullets }: HelpButtonProps) {
+export default function HelpButton({ playerCount, bullets, devilMode }: HelpButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
 
-  const composition = getDeckComposition(playerCount ?? 4)
+  const composition = getDeckComposition(playerCount ?? 4, devilMode ?? false)
   const deckSize = composition.reduce((sum, c) => sum + c.count, 0)
   const cardsDealt = playerCount ? playerCount * CARDS_PER_HAND : null
   const cardsRemaining = cardsDealt !== null ? deckSize - cardsDealt : null
@@ -63,6 +65,9 @@ export default function HelpButton({ playerCount, bullets }: HelpButtonProps) {
               <li>Pulling the trigger risks elimination — survive and the round continues.</li>
               <li>Emptying your hand makes you safe for the rest of the round.</li>
               <li>Last player alive wins.</li>
+              {devilMode && (
+                <li>😈 Devil Mode: one Devil Card is in play. It must be played alone and always counts as a match. If challenged, the challenge fails and every other player must pull the trigger.</li>
+              )}
             </ul>
 
             <div className="border-t border-gray-700 pt-4">

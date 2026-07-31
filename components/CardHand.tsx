@@ -14,14 +14,16 @@ const cardSymbols = {
   ACE: '♠A',
   KING: '♠K',
   QUEEN: '♠Q',
-  JOKER: '🃏'
+  JOKER: '🃏',
+  DEVIL: '😈'
 } as const
 
 const cardColors = {
   ACE: 'text-red-500',
   KING: 'text-yellow-400',
   QUEEN: 'text-purple-400',
-  JOKER: 'text-green-400'
+  JOKER: 'text-green-400',
+  DEVIL: 'text-red-600'
 } as const
 
 export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHandProps) {
@@ -41,6 +43,9 @@ export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHa
     if (!canInteract) return
     setSelectedIndices(prev => {
       if (prev.includes(index)) return prev.filter(i => i !== index)
+      // The Devil Card must be played strictly alone
+      if (cards[index] === 'DEVIL') return [index]
+      if (prev.some(i => cards[i] === 'DEVIL')) return prev
       if (prev.length >= 3) return prev
       return [...prev, index]
     })
@@ -91,9 +96,11 @@ export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHa
 
       {canInteract && (
         <div className="mt-3 text-xs text-gray-400 min-h-[1rem]">
-          {selectedIndices.length === 0
-            ? 'Tap to select 1–3 cards to play'
-            : `${selectedIndices.length} card${selectedIndices.length !== 1 ? 's' : ''} selected`}
+          {selectedIndices.length === 1 && cards[selectedIndices[0]] === 'DEVIL'
+            ? '😈 Devil Card selected — must be played alone'
+            : selectedIndices.length === 0
+              ? 'Tap to select 1–3 cards to play'
+              : `${selectedIndices.length} card${selectedIndices.length !== 1 ? 's' : ''} selected`}
         </div>
       )}
 

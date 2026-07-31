@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PlayCardsRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { getNextAlivePlayerIndex } from '@/lib/game-logic'
+import { getNextAlivePlayerIndex, isSoloOnlyViolation } from '@/lib/game-logic'
 import type { GameActionResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -59,6 +59,11 @@ export async function POST(request: NextRequest) {
 
       // Remove selected cards from hand
       const playedCards = cardIndices.map(i => player.hand[i])
+
+      if (isSoloOnlyViolation(playedCards)) {
+        throw new Error('The Devil Card must be played alone')
+      }
+
       const newHand = player.hand.filter((_, i) => !cardIndices.includes(i))
       const isSafe = newHand.length === 0
 
@@ -91,7 +96,7 @@ export async function POST(request: NextRequest) {
           pileCount: newPile.length,
           challengerIndex: null,
           lastPlay,
-          roulettePlayerId: playerId,
+          roulettePlayerIds: [playerId],
           version: gameState.version + 1,
           updatedAt: Date.now(),
         }

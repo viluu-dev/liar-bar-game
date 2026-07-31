@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { playerId, joinCode, bullets } = parseResult.data
+    const { playerId, joinCode, bullets, devilMode } = parseResult.data
 
     // Use distributed lock to prevent concurrent modifications
     const result = await withGameLock(joinCode, async () => {
@@ -50,8 +50,12 @@ export async function POST(request: NextRequest) {
         throw new Error(`At least ${MIN_PLAYERS} players are required to start the game`)
       }
 
+      const finalBullets = bullets ?? gameState.settings?.bullets ?? 1
+      const finalDevilMode = devilMode ?? gameState.settings?.devilMode ?? false
+      const finalSettings = { bullets: finalBullets, devilMode: finalDevilMode }
+
       // Create and shuffle the deck, scaled for the current player count
-      const initialDeck = createDeckForPlayerCount(gameState.players.length)
+      const initialDeck = createDeckForPlayerCount(gameState.players.length, finalDevilMode)
       const shuffledDeck = shuffleDeck(initialDeck)
 
       // Deal 5 cards to each player
@@ -59,9 +63,6 @@ export async function POST(request: NextRequest) {
 
       // Select a random Table Card for this round
       const tableCard = selectTableCard()
-
-      const finalBullets = bullets ?? gameState.settings?.bullets ?? 1
-      const finalSettings = { bullets: finalBullets }
 
       // Each player gets their own chamber
       const playersWithHands = gameState.players.map((player, index) => ({

@@ -51,7 +51,7 @@ describe('GameStateSchema', () => {
       claimedCount: 2,
       claimedCard: 'ACE' as const
     },
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 42,
@@ -85,7 +85,7 @@ describe('GameStateSchema', () => {
       tableCard: null,
       challengerIndex: null,
       lastPlay: null,
-      roulettePlayerId: null,
+      roulettePlayerIds: [],
       winnerId: null
     }
     expect(() => GameStateSchema.parse(nullableFields)).not.toThrow()
@@ -156,7 +156,7 @@ describe('ProjectedGameStateSchema', () => {
       claimedCount: 2,
       claimedCard: 'ACE' as const
     },
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 42
@@ -195,7 +195,7 @@ describe('API Response Schemas', () => {
         currentPlayerIndex: -1,
         challengerIndex: null,
         lastPlay: null,
-        roulettePlayerId: null,
+        roulettePlayerIds: [],
         roundNumber: 1,
         winnerId: null,
         version: 42

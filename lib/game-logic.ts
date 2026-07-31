@@ -11,24 +11,31 @@ import { MIN_PLAYERS, MAX_PLAYERS } from './constants'
  * Preserves the same Ace:King:Queen:Joker ratio (3:3:3:1) as the original
  * 4-player deck (6/6/6/2) at every table size, scaling up or down so each
  * player can always be dealt a 5-card hand with a small (0-2 card) surplus.
+ *
+ * When `devilMode` is enabled, exactly one Devil Card is added regardless of
+ * player count (docs/devil.card.md: "exactly one (1) Devil Card... per round").
  */
-export function getDeckComposition(playerCount: number): { card: Card; count: number }[] {
+export function getDeckComposition(playerCount: number, devilMode: boolean = false): { card: Card; count: number }[] {
   const perRank = Math.round(playerCount * 1.5)
   const jokers = Math.round(playerCount * 0.5)
-  return [
+  const composition: { card: Card; count: number }[] = [
     { card: 'ACE', count: perRank },
     { card: 'KING', count: perRank },
     { card: 'QUEEN', count: perRank },
     { card: 'JOKER', count: jokers },
   ]
+  if (devilMode) {
+    composition.push({ card: 'DEVIL', count: 1 })
+  }
+  return composition
 }
 
 /**
  * Creates a deck scaled for `playerCount` players (see getDeckComposition).
  */
-export function createDeckForPlayerCount(playerCount: number): Card[] {
+export function createDeckForPlayerCount(playerCount: number, devilMode: boolean = false): Card[] {
   const deck: Card[] = []
-  for (const { card, count } of getDeckComposition(playerCount)) {
+  for (const { card, count } of getDeckComposition(playerCount, devilMode)) {
     for (let i = 0; i < count; i++) {
       deck.push(card)
     }
@@ -89,27 +96,43 @@ export function dealCards(deck: Card[], playerCount: number): DealResult {
   if (playerCount < MIN_PLAYERS || playerCount > MAX_PLAYERS) {
     throw new Error(`Player count must be between ${MIN_PLAYERS} and ${MAX_PLAYERS}`)
   }
-  
+
   if (deck.length < playerCount * 5) {
     throw new Error('Not enough cards in deck to deal 5 cards per player')
   }
-  
+
+  const dealtCount = playerCount * 5
+
+  // The Devil Card must always reach a player's hand, never sit undealt in the
+  // surplus remainder. If it landed past the dealt range, swap it into a
+  // uniformly random dealt position so delivery is guaranteed without biasing
+  // which player receives it.
+  let workingDeck = deck
+  const devilIndex = deck.indexOf('DEVIL')
+  if (devilIndex !== -1 && devilIndex >= dealtCount) {
+    workingDeck = [...deck]
+    const randomArray = new Uint32Array(1)
+    crypto.getRandomValues(randomArray)
+    const swapIndex = randomArray[0] % dealtCount
+    ;[workingDeck[devilIndex], workingDeck[swapIndex]] = [workingDeck[swapIndex], workingDeck[devilIndex]]
+  }
+
   const playerHands: Card[][] = []
   let deckIndex = 0
-  
+
   // Deal 5 cards to each player
   for (let player = 0; player < playerCount; player++) {
     const hand: Card[] = []
     for (let card = 0; card < 5; card++) {
-      hand.push(deck[deckIndex])
+      hand.push(workingDeck[deckIndex])
       deckIndex++
     }
     playerHands.push(hand)
   }
-  
+
   // Return remaining cards in deck
-  const remainingDeck = deck.slice(deckIndex)
-  
+  const remainingDeck = workingDeck.slice(deckIndex)
+
   return {
     playerHands,
     remainingDeck
@@ -205,18 +228,26 @@ export function initChamber(bullets: number): boolean[] {
 
 /**
  * Resolves a "liar" challenge by checking the played cards against the table card.
- * Jokers count as valid wildcards for any table card.
+ * Jokers and the Devil Card count as valid wildcards for any table card.
  *
  * @param cards Actual cards that were played (from lastPlay.cards)
  * @param tableCard The declared table card for this round
  * @returns ChallengeResult with isValid flag and list of invalid cards
  */
 export function resolveChallenge(cards: Card[], tableCard: TableCard): ChallengeResult {
-  const invalidCards = cards.filter(c => c !== tableCard && c !== 'JOKER')
+  const invalidCards = cards.filter(c => c !== tableCard && c !== 'JOKER' && c !== 'DEVIL')
   return {
     isValid: invalidCards.length === 0,
     invalidCards,
   }
+}
+
+/**
+ * The Devil Card must be played strictly alone — it can never be combined
+ * with other cards in the same play (docs/devil.card.md).
+ */
+export function isSoloOnlyViolation(cards: Card[]): boolean {
+  return cards.includes('DEVIL') && cards.length > 1
 }
 
 /**

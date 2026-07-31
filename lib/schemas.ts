@@ -7,9 +7,15 @@ import { z } from 'zod'
 import { MAX_PLAYERS } from './constants'
 
 // Card type schemas
-export const CardSchema = z.enum(['ACE', 'KING', 'QUEEN', 'JOKER'])
+export const CardSchema = z.enum(['ACE', 'KING', 'QUEEN', 'JOKER', 'DEVIL'])
 export const TableCardSchema = z.enum(['ACE', 'KING', 'QUEEN'])
 export const GameStatusSchema = z.enum(['lobby', 'playing', 'challenge', 'roulette', 'finished'])
+
+// Game settings shared by create/start requests and persisted game state
+export const GameSettingsSchema = z.object({
+  bullets: z.number().int().min(1).max(6),
+  devilMode: z.boolean().optional(),
+})
 
 // Player validation schema
 export const PlayerSchema = z.object({
@@ -67,14 +73,14 @@ export const GameStateSchema = z.object({
   currentPlayerIndex: z.number().int().min(-1),
   challengerIndex: z.number().int().min(-1).nullable(),
   lastPlay: LastPlaySchema.nullable(),
-  roulettePlayerId: z.string().uuid().nullable(),
+  roulettePlayerIds: z.array(z.string().uuid()),
   roundNumber: z.number().int().min(1),
   winnerId: z.string().uuid().nullable(),
   version: z.number().int().min(0),
   createdAt: z.number().int().positive(),
   updatedAt: z.number().int().positive(),
   joinCode: z.string().length(4).optional(),
-  settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional(),
+  settings: GameSettingsSchema.optional(),
   rematchPlayerIds: z.array(z.string().uuid()).optional(),
 })
 
@@ -88,12 +94,12 @@ export const ProjectedGameStateSchema = z.object({
   currentPlayerIndex: z.number().int().min(-1),
   challengerIndex: z.number().int().min(-1).nullable(),
   lastPlay: ProjectedLastPlaySchema.nullable(),
-  roulettePlayerId: z.string().uuid().nullable(),
+  roulettePlayerIds: z.array(z.string().uuid()),
   roundNumber: z.number().int().min(1),
   winnerId: z.string().uuid().nullable(),
   version: z.number().int().min(0),
   joinCode: z.string().length(4).optional(),
-  settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional(),
+  settings: GameSettingsSchema.optional(),
   rematchPlayerIds: z.array(z.string().uuid()).optional(),
 })
 
@@ -102,7 +108,7 @@ export const ProjectedGameStateSchema = z.object({
 // Create game request
 export const CreateGameRequestSchema = z.object({
   playerName: z.string().min(1).max(50).trim(),
-  settings: z.object({ bullets: z.number().int().min(1).max(6) }).optional()
+  settings: GameSettingsSchema.optional()
 })
 
 // Join game request
@@ -115,7 +121,8 @@ export const JoinGameRequestSchema = z.object({
 export const StartGameRequestSchema = z.object({
   playerId: z.string().uuid(),
   joinCode: z.string().length(4),
-  bullets: z.number().int().min(1).max(6).optional()
+  bullets: z.number().int().min(1).max(6).optional(),
+  devilMode: z.boolean().optional()
 })
 
 // Kick player request

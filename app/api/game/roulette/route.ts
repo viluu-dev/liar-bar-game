@@ -29,8 +29,8 @@ export async function POST(request: NextRequest) {
         throw new Error('Game is not in roulette phase')
       }
 
-      if (gameState.roulettePlayerId !== playerId) {
-        throw new Error('Only the challenge loser can pull the trigger')
+      if (!gameState.roulettePlayerIds.includes(playerId)) {
+        throw new Error('Only a designated shooter can pull the trigger')
       }
 
       const playerIndex = gameState.players.findIndex(p => p.id === playerId)
@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
 
       const alivePlayers = updatedPlayers.filter(p => p.isAlive)
 
-      // Win condition: only one player left
+      // Win condition: only one player left — ends the game immediately even if
+      // other players are still pending a pull in a Devil mass penalty.
       if (alivePlayers.length <= 1) {
         const winner = alivePlayers[0] ?? null
         const finishedPlayers = updatedPlayers.map(p =>
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
           ...gameState,
           status: 'finished' as const,
           players: finishedPlayers,
-          roulettePlayerId: null,
+          roulettePlayerIds: [],
           winnerId: winner?.id ?? null,
           version: gameState.version + 1,
           updatedAt: Date.now(),
@@ -74,15 +75,45 @@ export async function POST(request: NextRequest) {
         return { version: updatedState.version, result: eliminated ? 'eliminated' : 'safe' } as const
       }
 
+      // If other players still owe a pull (Devil mass penalty), just record this
+      // player's outcome and stay in the roulette phase — no round reset yet.
+      const remainingPending = gameState.roulettePlayerIds.filter(id => id !== playerId)
+      if (remainingPending.length > 0) {
+        const nextChamberIndex = chamberIndex + 1
+        const pendingBullets = gameState.settings?.bullets ?? 1
+        const playersAfterPull = updatedPlayers.map(p => {
+          if (p.id !== playerId) return p
+          const nextChamber = nextChamberIndex >= 6 ? initChamber(pendingBullets) : chamber
+          const nextIdx = nextChamberIndex >= 6 ? 0 : nextChamberIndex
+          return { ...p, chamber: nextChamber, chamberIndex: nextIdx }
+        })
+        const updatedState = {
+          ...gameState,
+          players: playersAfterPull as typeof gameState.players,
+          roulettePlayerIds: remainingPending,
+          version: gameState.version + 1,
+          updatedAt: Date.now(),
+        }
+        await setGameState(updatedState)
+        return { version: updatedState.version, result: eliminated ? 'eliminated' : 'safe' } as const
+      }
+
       // Round reset — reshuffle and deal new hands to all alive players
-      const newDeck = shuffleDeck(createDeckForPlayerCount(alivePlayers.length))
+      const devilMode = gameState.settings?.devilMode ?? false
+      const newDeck = shuffleDeck(createDeckForPlayerCount(alivePlayers.length, devilMode))
       const { playerHands, remainingDeck } = dealCards(newDeck, alivePlayers.length)
 
-      // The player who pulled the trigger starts the next round if they survived;
-      // otherwise the next alive player after them starts
-      const nextRoundStartIndex = eliminated
-        ? getNextAlivePlayerIndex(updatedPlayers, playerIndex, false)
-        : playerIndex
+      // A Devil mass penalty has no single "trigger puller" to anchor the next
+      // round on — the Devil player (who never pulls) starts it instead. For a
+      // normal single-loser round, the player who pulled the trigger starts the
+      // next round if they survived; otherwise the next alive player after them.
+      const isDevilRound =
+        gameState.lastPlay?.cards.length === 1 && gameState.lastPlay.cards[0] === 'DEVIL'
+      const nextRoundStartIndex = isDevilRound
+        ? gameState.players.findIndex(p => p.id === gameState.lastPlay!.playerId)
+        : eliminated
+          ? getNextAlivePlayerIndex(updatedPlayers, playerIndex, false)
+          : playerIndex
 
       // Advance loser's personal chamberIndex; re-init if all 6 used
       const nextChamberIndex = chamberIndex + 1
@@ -111,7 +142,7 @@ export async function POST(request: NextRequest) {
         currentPlayerIndex: nextRoundStartIndex ?? updatedPlayers.findIndex(p => p.isAlive),
         challengerIndex: null,
         lastPlay: null,
-        roulettePlayerId: null,
+        roulettePlayerIds: [],
         roundNumber: gameState.roundNumber + 1,
         winnerId: null,
         version: gameState.version + 1,

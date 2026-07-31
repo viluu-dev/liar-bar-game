@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createInitialDeck, createDeckForPlayerCount, getDeckComposition, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive } from './game-logic'
+import { createInitialDeck, createDeckForPlayerCount, getDeckComposition, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive, isSoloOnlyViolation } from './game-logic'
 import type { Card, TableCard } from './types'
 
 describe('createInitialDeck', () => {
@@ -76,6 +76,21 @@ describe('getDeckComposition / createDeckForPlayerCount', () => {
       const total = composition.reduce((sum, c) => sum + c.count, 0)
 
       expect(createDeckForPlayerCount(playerCount)).toHaveLength(total)
+    }
+  })
+
+  it('does not include a Devil Card when devilMode is false (default)', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      expect(getDeckComposition(playerCount).find(c => c.card === 'DEVIL')).toBeUndefined()
+      expect(createDeckForPlayerCount(playerCount)).not.toContain('DEVIL')
+    }
+  })
+
+  it('includes exactly one Devil Card when devilMode is true, regardless of player count', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      const composition = getDeckComposition(playerCount, true)
+      expect(composition.find(c => c.card === 'DEVIL')?.count).toBe(1)
+      expect(createDeckForPlayerCount(playerCount, true).filter(c => c === 'DEVIL')).toHaveLength(1)
     }
   })
 })
@@ -236,9 +251,34 @@ describe('dealCards', () => {
     // Create deck with exactly enough cards for 4 players
     const deck: Card[] = new Array(20).fill('ACE') as Card[]
     const result = dealCards(deck, 4) // 4 * 5 = 20 cards
-    
+
     expect(result.playerHands).toHaveLength(4)
     expect(result.remainingDeck).toHaveLength(0)
+  })
+
+  describe('guaranteed Devil Card delivery', () => {
+    it('always deals the Devil Card to a player, never leaves it in the remaining deck', () => {
+      for (let playerCount = 2; playerCount <= 8; playerCount++) {
+        for (let trial = 0; trial < 20; trial++) {
+          const deck = shuffleDeck(createDeckForPlayerCount(playerCount, true))
+          const result = dealCards(deck, playerCount)
+
+          expect(result.remainingDeck).not.toContain('DEVIL')
+          const devilCount = result.playerHands.reduce(
+            (sum, hand) => sum + hand.filter(c => c === 'DEVIL').length,
+            0
+          )
+          expect(devilCount).toBe(1)
+        }
+      }
+    })
+
+    it('is a no-op when the Devil Card is not present in the deck', () => {
+      const deck = createInitialDeck() // no DEVIL in a devilMode-off deck
+      const result = dealCards(deck, 4)
+      expect(result.remainingDeck).not.toContain('DEVIL')
+      expect(result.playerHands.flat()).not.toContain('DEVIL')
+    })
   })
 })
 
@@ -484,6 +524,28 @@ describe('resolveChallenge', () => {
     const result = resolveChallenge(['QUEEN'], 'ACE')
     expect(result.isValid).toBe(false)
     expect(result.invalidCards).toEqual(['QUEEN'])
+  })
+
+  it('treats a lone Devil Card as valid against any table card', () => {
+    const result = resolveChallenge(['DEVIL'], 'KING')
+    expect(result.isValid).toBe(true)
+    expect(result.invalidCards).toHaveLength(0)
+  })
+})
+
+describe('isSoloOnlyViolation', () => {
+  it('returns false for a lone Devil Card', () => {
+    expect(isSoloOnlyViolation(['DEVIL'])).toBe(false)
+  })
+
+  it('returns true when the Devil Card is combined with other cards', () => {
+    expect(isSoloOnlyViolation(['DEVIL', 'ACE'])).toBe(true)
+    expect(isSoloOnlyViolation(['KING', 'DEVIL', 'QUEEN'])).toBe(true)
+  })
+
+  it('returns false for normal multi-card plays without the Devil Card', () => {
+    expect(isSoloOnlyViolation(['ACE', 'KING'])).toBe(false)
+    expect(isSoloOnlyViolation(['JOKER', 'JOKER', 'JOKER'])).toBe(false)
   })
 })
 

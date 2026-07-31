@@ -48,7 +48,7 @@ describe('/api/game/challenge', () => {
       claimedCount: 2,
       claimedCard: 'KING',
     },
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 5,
@@ -120,7 +120,7 @@ describe('/api/game/challenge', () => {
   })
 
   describe('liar — honest play (challenger loses)', () => {
-    it('sets roulettePlayerId to challenger when play was honest', async () => {
+    it('sets roulettePlayerIds to challenger when play was honest', async () => {
       // All cards in lastPlay match tableCard or are Jokers → honest
       const state = makeState()
       state.lastPlay!.cards = ['KING', 'KING'] // both match tableCard 'KING'
@@ -133,7 +133,7 @@ describe('/api/game/challenge', () => {
       expect(mockSetGameState).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'roulette',
-          roulettePlayerId: PLAYER_B, // challenger loses
+          roulettePlayerIds: [PLAYER_B], // challenger loses
           challengerIndex: null,
         })
       )
@@ -149,14 +149,14 @@ describe('/api/game/challenge', () => {
       expect(mockSetGameState).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'roulette',
-          roulettePlayerId: PLAYER_B, // challenger loses (was honest)
+          roulettePlayerIds: [PLAYER_B], // challenger loses (was honest)
         })
       )
     })
   })
 
   describe('liar — dishonest play (player who played loses)', () => {
-    it('sets roulettePlayerId to the player who lied', async () => {
+    it('sets roulettePlayerIds to the player who lied', async () => {
       const state = makeState()
       state.lastPlay!.cards = ['ACE', 'KING'] // ACE doesn't match tableCard 'KING' → lie
       mockGetGameState.mockResolvedValue(state)
@@ -168,10 +168,53 @@ describe('/api/game/challenge', () => {
       expect(mockSetGameState).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'roulette',
-          roulettePlayerId: PLAYER_A, // Alice played and lied
+          roulettePlayerIds: [PLAYER_A], // Alice played and lied
           challengerIndex: null,
         })
       )
+    })
+  })
+
+  describe('liar — Devil Card mass penalty', () => {
+    it('sets roulettePlayerIds to every other alive player, not just the challenger', async () => {
+      const state = makeState()
+      state.lastPlay!.cards = ['DEVIL']
+      mockGetGameState.mockResolvedValue(state)
+
+      const res = await POST(makeRequest({ playerId: PLAYER_B, joinCode: 'TEST', action: 'liar' }))
+
+      expect(res.status).toBe(200)
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'roulette',
+          roulettePlayerIds: [PLAYER_B, PLAYER_C],
+          challengerIndex: null,
+        })
+      )
+    })
+
+    it('excludes already-eliminated players from the mass penalty', async () => {
+      const state = makeState()
+      state.lastPlay!.cards = ['DEVIL']
+      state.players[2].isAlive = false // Carol already eliminated
+      mockGetGameState.mockResolvedValue(state)
+
+      await POST(makeRequest({ playerId: PLAYER_B, joinCode: 'TEST', action: 'liar' }))
+
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({ roulettePlayerIds: [PLAYER_B] })
+      )
+    })
+
+    it('never marks the Devil player themselves as needing to pull', async () => {
+      const state = makeState()
+      state.lastPlay!.cards = ['DEVIL']
+      mockGetGameState.mockResolvedValue(state)
+
+      await POST(makeRequest({ playerId: PLAYER_B, joinCode: 'TEST', action: 'liar' }))
+
+      const updatedState = mockSetGameState.mock.calls[0][0] as GameState
+      expect(updatedState.roulettePlayerIds).not.toContain(PLAYER_A)
     })
   })
 

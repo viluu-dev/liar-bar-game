@@ -21,6 +21,7 @@ export default function LobbyPage() {
   const [isShuffling, setIsShuffling] = useState(false)
   const [error, setError] = useState('')
   const [pendingBullets, setPendingBullets] = useState(1)
+  const [pendingDevilMode, setPendingDevilMode] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
   const router = useRouter()
 
@@ -72,6 +73,12 @@ export default function LobbyPage() {
     }
   }, [gameData?.gameState?.settings?.bullets])
 
+  useEffect(() => {
+    if (gameData?.gameState?.settings?.devilMode !== undefined) {
+      setPendingDevilMode(gameData.gameState.settings.devilMode)
+    }
+  }, [gameData?.gameState?.settings?.devilMode])
+
   const handleStartGame = async () => {
     if (!playerId || !joinCode) return
 
@@ -82,7 +89,7 @@ export default function LobbyPage() {
       const response = await fetch('/api/game/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, joinCode, bullets: pendingBullets }),
+        body: JSON.stringify({ playerId, joinCode, bullets: pendingBullets, devilMode: pendingDevilMode }),
       })
 
       if (!response.ok) {
@@ -197,7 +204,7 @@ export default function LobbyPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
-      <HelpButton playerCount={playerCount} bullets={pendingBullets} />
+      <HelpButton playerCount={playerCount} bullets={pendingBullets} devilMode={pendingDevilMode} />
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-red-500 mb-2">Game Lobby</h1>
@@ -313,6 +320,33 @@ export default function LobbyPage() {
                     {n}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">
+                    😈 Devil Mode
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Adds a solo wildcard that can trigger a mass penalty
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPendingDevilMode(v => !v)}
+                  role="switch"
+                  aria-checked={pendingDevilMode}
+                  className={`min-h-[32px] w-14 shrink-0 rounded-full transition-colors relative ${
+                    pendingDevilMode ? 'bg-red-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform ${
+                      pendingDevilMode ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 

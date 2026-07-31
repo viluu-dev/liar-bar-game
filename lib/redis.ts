@@ -305,7 +305,7 @@ export function projectGameView(
     currentPlayerIndex: state.currentPlayerIndex,
     challengerIndex: state.challengerIndex,
     lastPlay: projectedLastPlay,
-    roulettePlayerId: state.roulettePlayerId,
+    roulettePlayerIds: state.roulettePlayerIds,
     roundNumber: state.roundNumber,
     winnerId: state.winnerId,
     version: state.version,

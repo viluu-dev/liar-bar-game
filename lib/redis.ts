@@ -310,6 +310,7 @@ export function projectGameView(
     challengerIndex: state.challengerIndex,
     lastPlay: projectedLastPlay,
     roulettePlayerIds: state.roulettePlayerIds,
+    roulettePhaseStartedAt: state.roulettePhaseStartedAt,
     myDevilRank: state.devilPlayerId === playerId ? state.devilRank : null,
     roundNumber: state.roundNumber,
     winnerId: state.winnerId,

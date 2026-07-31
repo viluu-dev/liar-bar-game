@@ -1,5 +1,3 @@
-<!-- GSD:project-start source:PROJECT.md -->
-
 ## Project
 
 **Liar's Bar — Online Multiplayer Card Game**
@@ -7,9 +5,6 @@
 A browser-based multiplayer implementation of the Liar's Bar bluffing card game. Players join from their own devices, enter a name, and play a high-stakes bluffing game where losing means pulling a virtual trigger. One active game session at a time. Mobile-first, portrait layout, playful visual style.
 
 **Core Value:** The Russian Roulette moment — the tension of calling "Liar!" and the reveal that follows. Everything else serves that climax.
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:research/STACK.md -->
 
 ## Technology Stack
 
@@ -86,18 +81,6 @@ A browser-based multiplayer implementation of the Liar's Bar bluffing card game.
 | WebSockets (native, Vercel Functions) | Available in public beta (June 2026) but capped at 5 min/connection on Hobby tier (30 min needs Pro/Enterprise), pinned to a single Function instance, no built-in cross-instance broadcast | Evaluated and rejected for this project — would require building a manual internal-Redis-polling relay per connection to fan out across instances, plus reconnect-every-5-minutes handling. Ably (managed pub/sub) used instead; see Technology Stack. |
 | Upstash commands/month | 500K | Heartbeat writes on every poll no longer trigger a publish (see `setGameState`'s `{ publish: false }` option), and the fallback poll interval is ~6x longer than the old 2s primary interval, so command volume is well under the old ceiling |
 
-## Package Installation
-
-# Create project
-
-# State store
-
-# Polling
-
-# Validation
-
-# Animation
-
 ## What NOT to Use
 
 | Technology | Why Not |
@@ -146,48 +129,14 @@ A browser-based multiplayer implementation of the Liar's Bar bluffing card game.
 - [Upstash Next.js tutorial](https://upstash.com/docs/redis/tutorials/nextjs_with_redis)
 - [Serverless race conditions + Redis locking](https://www.marc0.dev/en/blog/serverless/serverless-race-conditions-redis-locking-guide-next-js-1767987756289)
 
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
-
 ## Conventions
 
 Conventions not yet established. Will populate as patterns emerge during development.
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
 
 ## Architecture
 
 Architecture not yet mapped. Follow existing patterns found in the codebase.
-<!-- GSD:architecture-end -->
-
-<!-- GSD:skills-start source:skills/ -->
 
 ## Project Skills
 
 No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
-<!-- GSD:skills-end -->
-
-<!-- GSD:workflow-start source:GSD defaults -->
-
-## GSD Workflow Enforcement
-
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
-
-Use these entry points:
-
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
-
-<!-- GSD:profile-start -->
-
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->

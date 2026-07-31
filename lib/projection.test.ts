@@ -62,6 +62,7 @@ function createTestGameState(): GameState {
     challengerIndex: 1,
     lastPlay,
     roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 2,
     winnerId: null,
     version: 15,

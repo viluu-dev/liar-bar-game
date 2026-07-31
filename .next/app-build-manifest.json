@@ -1,10 +1,5 @@
 {
   "pages": {
-    "/api/game/state/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/game/state/route.js"
-    ],
     "/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -25,6 +20,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/lobby/page.js"
+    ],
+    "/api/game/state/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/game/state/route.js"
     ],
     "/api/ably-token/route": [
       "static/chunks/webpack.js",
@@ -60,11 +60,6 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/game/roulette/route.js"
-    ],
-    "/api/game/rematch/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/game/rematch/route.js"
     ]
   }
 }

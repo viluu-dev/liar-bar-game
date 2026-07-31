@@ -50,6 +50,7 @@ describe('/api/game/challenge', () => {
       isDevilPlay: false,
     },
     roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 1,
     winnerId: null,
     version: 5,
@@ -138,6 +139,7 @@ describe('/api/game/challenge', () => {
           status: 'roulette',
           roulettePlayerIds: [PLAYER_B], // challenger loses
           challengerIndex: null,
+          roulettePhaseStartedAt: expect.any(Number),
         })
       )
     })
@@ -193,6 +195,7 @@ describe('/api/game/challenge', () => {
           status: 'roulette',
           roulettePlayerIds: [PLAYER_B, PLAYER_C],
           challengerIndex: null,
+          roulettePhaseStartedAt: expect.any(Number),
         })
       )
     })

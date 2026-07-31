@@ -58,6 +58,7 @@ describe('/api/game/play', () => {
     challengerIndex: null,
     lastPlay: null,
     roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 1,
     winnerId: null,
     version: 3,
@@ -173,6 +174,7 @@ describe('/api/game/play', () => {
           status: 'roulette',
           roulettePlayerIds: [HOST_UUID],
           challengerIndex: null,
+          roulettePhaseStartedAt: expect.any(Number),
         })
       )
     })
@@ -319,7 +321,10 @@ describe('/api/game/play', () => {
     })
 
     it('rejects when game is not in playing phase', async () => {
-      mockGetGameState.mockResolvedValue(makeGameState({ status: 'challenge' }))
+      // 'challenge' is no longer rejected here — POST /api/game/play now also
+      // handles the collapsed challenge→play path (see describe block below).
+      // 'roulette' remains a genuinely unplayable status.
+      mockGetGameState.mockResolvedValue(makeGameState({ status: 'roulette' }))
       const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
       const body = await res.json()
       expect(res.status).toBe(400)
@@ -360,6 +365,94 @@ describe('/api/game/play', () => {
       const body = await res.json()
       expect(res.status).toBe(400)
       expect(body.error).toBe('Duplicate card indices are not allowed')
+    })
+  })
+
+  describe('play while status === "challenge" (collapsed believe→play)', () => {
+    const makeChallengeState = (overrides: Partial<GameState> = {}) => makeGameState({
+      status: 'challenge',
+      challengerIndex: 1,
+      currentPlayerIndex: 0,
+      lastPlay: {
+        playerId: HOST_UUID,
+        playerName: 'Alice',
+        cards: ['KING'],
+        claimedCount: 1,
+        claimedCard: 'KING',
+        isDevilPlay: false,
+      },
+      ...overrides,
+    })
+
+    it('performs the believe-transition and the play atomically, advancing to the next challenger', async () => {
+      mockGetGameState.mockResolvedValue(makeChallengeState())
+      mockSetGameState.mockResolvedValue()
+
+      const res = await POST(makeRequest({ playerId: PLAYER2_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.success).toBe(true)
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'challenge',
+          challengerIndex: 0, // wraps back to Alice, the only other alive non-safe player
+          lastPlay: expect.objectContaining({ playerId: PLAYER2_UUID, claimedCard: 'KING' }),
+        })
+      )
+    })
+
+    it('routes straight to roulette when the believing challenger is the last player with cards', async () => {
+      const state = makeChallengeState()
+      state.players[0].isSafe = true // Alice already safe → no eligible next challenger after Bob plays
+      mockGetGameState.mockResolvedValue(state)
+      mockSetGameState.mockResolvedValue()
+
+      await POST(makeRequest({ playerId: PLAYER2_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'roulette',
+          roulettePlayerIds: [PLAYER2_UUID],
+          roulettePhaseStartedAt: expect.any(Number),
+        })
+      )
+    })
+
+    it('rejects a non-challenger attempting to play during challenge', async () => {
+      mockGetGameState.mockResolvedValue(makeChallengeState())
+      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+      const body = await res.json()
+      expect(res.status).toBe(400)
+      expect(body.error).toBe('Only the designated challenger can respond')
+    })
+
+    it('rejects a safe (hand-empty) challenger defensively', async () => {
+      const state = makeChallengeState()
+      state.players[1].isSafe = true
+      mockGetGameState.mockResolvedValue(state)
+      const res = await POST(makeRequest({ playerId: PLAYER2_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+      const body = await res.json()
+      expect(res.status).toBe(400)
+      expect(body.error).toBe('Safe players cannot play cards')
+    })
+
+    it('rejects an eliminated challenger', async () => {
+      const state = makeChallengeState()
+      state.players[1].isAlive = false
+      mockGetGameState.mockResolvedValue(state)
+      const res = await POST(makeRequest({ playerId: PLAYER2_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+      const body = await res.json()
+      expect(res.status).toBe(400)
+      expect(body.error).toBe('Eliminated players cannot challenge')
+    })
+
+    it('rejects when no challenger is set', async () => {
+      mockGetGameState.mockResolvedValue(makeChallengeState({ challengerIndex: null }))
+      const res = await POST(makeRequest({ playerId: PLAYER2_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+      const body = await res.json()
+      expect(res.status).toBe(400)
+      expect(body.error).toBe('No challenger set for this challenge')
     })
   })
 })

@@ -10,15 +10,6 @@ vi.mock('@/lib/redis', () => ({
   withGameLock: vi.fn(),
 }))
 
-vi.mock('@/lib/game-logic', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/game-logic')>()
-  return {
-    ...actual,
-    selectTableCard: vi.fn(() => 'KING' as const),
-    selectDevilCard: vi.fn(() => ({ handIndex: 0, rank: 'QUEEN' as const })),
-  }
-})
-
 describe('/api/game/roulette', () => {
   const mockGetGameState = vi.mocked(getGameState)
   const mockSetGameState = vi.mocked(setGameState)
@@ -58,6 +49,7 @@ describe('/api/game/roulette', () => {
     challengerIndex: null,
     lastPlay: { playerId: PLAYER2_UUID, playerName: 'Bob', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: false },
     roulettePlayerIds: [LOSER_UUID],
+    roulettePhaseStartedAt: null,
     roundNumber: 2,
     winnerId: null,
     version: 8,
@@ -92,6 +84,7 @@ describe('/api/game/roulette', () => {
           pileCount: 0,
           lastPlay: null,
           roulettePlayerIds: [],
+          roulettePhaseStartedAt: null,
           roundNumber: 3,
           challengerIndex: null,
         })
@@ -139,17 +132,31 @@ describe('/api/game/roulette', () => {
     it('re-rolls the Devil Card assignment from the new hands on round reset', async () => {
       // The Devil Card is re-rolled every round reset — the previous round's
       // assignment (here, Bob/PLAYER2_UUID) is discarded even though it was
-      // never played, and the mocked selectDevilCard's pick (handIndex 0,
-      // which maps to the first alive player, Alice/LOSER_UUID) is used instead.
+      // never played. selectDevilCard/selectTableCard are called from inside
+      // applyRoulettePull (same module), so mocking them via vi.mock would
+      // not intercept those internal calls — crypto.getRandomValues is
+      // controlled directly instead, exactly like the deterministic-shuffle
+      // tests in lib/game-logic.test.ts. With every draw forced to 0, dealing
+      // to 2 alive players deterministically picks handIndex 0 (Alice,
+      // LOSER_UUID), rank ACE — see lib/game-logic.ts's shuffleArray/
+      // selectDevilCard for how this specific outcome arises.
+      const originalGetRandomValues = global.crypto.getRandomValues
+      global.crypto.getRandomValues = ((arr: Uint32Array) => { arr[0] = 0; return arr }) as typeof global.crypto.getRandomValues
+
       mockGetGameState.mockResolvedValue(makeState({
         settings: { bullets: 1, devilMode: true },
         devilPlayerId: PLAYER2_UUID,
         devilRank: 'KING',
       }))
-      await POST(makeRequest({ playerId: LOSER_UUID, joinCode: 'TEST' }))
+
+      try {
+        await POST(makeRequest({ playerId: LOSER_UUID, joinCode: 'TEST' }))
+      } finally {
+        global.crypto.getRandomValues = originalGetRandomValues
+      }
 
       expect(mockSetGameState).toHaveBeenCalledWith(
-        expect.objectContaining({ devilPlayerId: LOSER_UUID, devilRank: 'QUEEN' })
+        expect.objectContaining({ devilPlayerId: LOSER_UUID, devilRank: 'ACE' })
       )
     })
   })
@@ -200,6 +207,7 @@ describe('/api/game/roulette', () => {
         expect.objectContaining({
           status: 'finished',
           winnerId: null,
+          roulettePhaseStartedAt: null,
         })
       )
     })
@@ -243,6 +251,7 @@ describe('/api/game/roulette', () => {
       challengerIndex: null,
       lastPlay: { playerId: DEVIL_UUID, playerName: 'Dana', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: true },
       roulettePlayerIds: [SHOOTER1_UUID, SHOOTER2_UUID],
+      roulettePhaseStartedAt: null,
       roundNumber: 2,
       winnerId: null,
       version: 8,

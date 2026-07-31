@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
           ...gameState,
           status: 'roulette' as const,
           roulettePlayerIds,
+          roulettePhaseStartedAt: Date.now(),
           challengerIndex: null,
           players: gameState.players.map((p, i) =>
             i === gameState.challengerIndex ? { ...p, lastSeenAt: Date.now() } : p
@@ -114,6 +115,7 @@ export async function POST(request: NextRequest) {
         ...gameState,
         status: 'roulette' as const,
         roulettePlayerIds: [loserPlayerId],
+        roulettePhaseStartedAt: Date.now(),
         challengerIndex: null,
         players: gameState.players.map((p, i) =>
           i === gameState.challengerIndex ? { ...p, lastSeenAt: Date.now() } : p

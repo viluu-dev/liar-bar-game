@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { motion } from 'motion/react'
 import type { Card, ProjectedLastPlay, ProjectedPlayer, TableCard } from '@/lib/types'
 import ChamberDots from './ChamberDots'
+import TriggerTimer from './TriggerTimer'
 
 interface ChallengeRevealProps {
   lastPlay: ProjectedLastPlay & { cards: Card[]; isDevilPlay: boolean }
@@ -10,6 +12,7 @@ interface ChallengeRevealProps {
   pendingShooters: ProjectedPlayer[]
   players: ProjectedPlayer[]
   playerId: string
+  roulettePhaseStartedAt: number | null
   onRoulette?: () => Promise<void>
 }
 
@@ -37,6 +40,7 @@ export default function ChallengeReveal({
   pendingShooters,
   players,
   playerId,
+  roulettePhaseStartedAt,
   onRoulette,
 }: ChallengeRevealProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -49,6 +53,7 @@ export default function ChallengeReveal({
   const chamberIndex = me?.chamberIndex
   const waitingNames = pendingShooters.filter(p => p.id !== playerId).map(p => p.name)
   const cardLabel = (c: number) => (c === 1 ? 'card' : 'cards')
+  const verdictDelay = cards.length * 0.15 + 0.3
 
   const handleRoulette = async () => {
     if (isSubmitting) return
@@ -70,7 +75,7 @@ export default function ChallengeReveal({
         {claimedCount} {cardLabel(claimedCount)} were {claimedCard}s
       </div>
 
-      {/* Revealed cards */}
+      {/* Revealed cards — staggered 3D flip, back-to-front */}
       <div>
         <p className="text-center text-xs text-gray-500 uppercase tracking-wider mb-3">
           Cards revealed
@@ -79,43 +84,65 @@ export default function ChallengeReveal({
           {cards.map((card, i) => {
             const valid = isValidCard(card, tableCard, isDevilPlay)
             return (
-              <div
-                key={i}
-                className={`
-                  relative w-16 h-24 rounded-lg border-2 flex flex-col items-center justify-center
-                  ${valid
-                    ? 'bg-gray-800 border-green-500 shadow-lg shadow-green-500/20'
-                    : 'bg-gray-800 border-red-500 shadow-lg shadow-red-500/20'
-                  }
-                `}
-              >
-                <div className={`text-2xl font-bold ${cardColors[card]}`}>
-                  {cardSymbols[card]}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">{card}</div>
-                {card === 'JOKER' && (
-                  <div className="absolute -top-2 -right-2 bg-green-500 text-black text-xs font-bold px-1 rounded">
-                    wild
+              <div key={i} className="w-16 h-24" style={{ perspective: '1000px' }}>
+                <motion.div
+                  className="relative w-full h-full"
+                  style={{ transformStyle: 'preserve-3d' }}
+                  initial={{ rotateY: 180 }}
+                  animate={{ rotateY: 0 }}
+                  transition={{ delay: i * 0.15, duration: 0.5 }}
+                >
+                  {/* Front face — the revealed rank */}
+                  <div
+                    className={`
+                      absolute inset-0 rounded-lg border-2 flex flex-col items-center justify-center
+                      ${valid
+                        ? 'bg-gray-800 border-green-500 shadow-lg shadow-green-500/20'
+                        : 'bg-gray-800 border-red-500 shadow-lg shadow-red-500/20'
+                      }
+                    `}
+                    style={{ backfaceVisibility: 'hidden' }}
+                  >
+                    <div className={`text-2xl font-bold ${cardColors[card]}`}>
+                      {cardSymbols[card]}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">{card}</div>
+                    {card === 'JOKER' && (
+                      <div className="absolute -top-2 -right-2 bg-green-500 text-black text-xs font-bold px-1 rounded">
+                        wild
+                      </div>
+                    )}
+                    {isDevilPlay && i === 0 && (
+                      <div className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold px-1 rounded">
+                        devil
+                      </div>
+                    )}
+                    {!valid && (
+                      <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-1 rounded">
+                        ✗
+                      </div>
+                    )}
                   </div>
-                )}
-                {isDevilPlay && i === 0 && (
-                  <div className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold px-1 rounded">
-                    devil
+
+                  {/* Back face — hidden card, shown until the flip completes */}
+                  <div
+                    className="absolute inset-0 rounded-lg border-2 border-gray-600 bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center"
+                    style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                  >
+                    <div className="text-2xl text-gray-500">🂠</div>
                   </div>
-                )}
-                {!valid && (
-                  <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold px-1 rounded">
-                    ✗
-                  </div>
-                )}
+                </motion.div>
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* Verdict */}
-      <div
+      {/* Verdict — fades in only after the flips finish, a beat of suspense */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: verdictDelay }}
         className={`rounded-xl p-4 text-center border ${
           isDevilPlay
             ? 'bg-red-950/40 border-red-700'
@@ -145,7 +172,7 @@ export default function ChallengeReveal({
             </p>
           </>
         )}
-      </div>
+      </motion.div>
 
       {/* Roulette trigger */}
       {chamberIndex !== undefined && (
@@ -162,6 +189,9 @@ export default function ChallengeReveal({
           <p className="text-center text-sm text-red-400 font-semibold animate-pulse">
             Your fate awaits…
           </p>
+          {roulettePhaseStartedAt !== null && (
+            <TriggerTimer phaseStartedAt={roulettePhaseStartedAt} size="inline" />
+          )}
           {error && (
             <p className="text-center text-xs text-red-400">{error}</p>
           )}

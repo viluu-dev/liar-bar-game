@@ -99,6 +99,7 @@ describe('/api/game/state GET', () => {
       challengerIndex: null,
       lastPlay: null,
       roulettePlayerIds: [],
+      roulettePhaseStartedAt: null,
       roundNumber: 1,
       winnerId: null,
       version: 5,
@@ -143,6 +144,7 @@ describe('/api/game/state GET', () => {
       challengerIndex: null,
       lastPlay: null,
       roulettePlayerIds: [],
+      roulettePhaseStartedAt: null,
       roundNumber: 1,
       winnerId: null,
       version: 5,
@@ -185,6 +187,7 @@ describe('/api/game/state GET', () => {
       challengerIndex: null,
       lastPlay: null,
       roulettePlayerIds: [],
+      roulettePhaseStartedAt: null,
       roundNumber: 1,
       winnerId: null,
       version: 3,
@@ -213,6 +216,7 @@ describe('/api/game/state GET', () => {
       challengerIndex: null,
       lastPlay: null,
       roulettePlayerIds: [],
+      roulettePhaseStartedAt: null,
       roundNumber: 1,
       winnerId: null,
       version: 4,
@@ -269,6 +273,7 @@ describe('/api/game/state GET', () => {
       challengerIndex: null,
       lastPlay: null,
       roulettePlayerIds: [],
+      roulettePhaseStartedAt: null,
       roundNumber: 1,
       winnerId: null,
       version: 3,
@@ -288,6 +293,7 @@ describe('/api/game/state GET', () => {
       challengerIndex: null,
       lastPlay: null,
       roulettePlayerIds: [],
+      roulettePhaseStartedAt: null,
       roundNumber: 1,
       winnerId: null,
       version: 3,
@@ -318,5 +324,76 @@ describe('/api/game/state GET', () => {
 
     expect(response.status).toBe(500)
     expect(data.error).toContain('Failed to retrieve game state')
+  })
+
+  describe('autoPullIfRouletteExpired wiring', () => {
+    const OTHER_ID = '223e4567-e89b-12d3-a456-426614174001'
+
+    const makeRouletteState = (roulettePhaseStartedAt: number): GameState => {
+      const now = Date.now()
+      return {
+        status: 'roulette',
+        players: [
+          { id: playerId, name: 'Shooter', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: now - 10_000, lastSeenAt: now - 1000, chamber: [false, false, false, false, false, false], chamberIndex: 0 },
+          { id: OTHER_ID, name: 'Other', hand: ['ACE', 'KING', 'QUEEN', 'JOKER', 'ACE'] as Player['hand'], isAlive: true, isSafe: false, isHost: false, joinedAt: now - 9000, lastSeenAt: now - 500 },
+        ],
+        deck: [],
+        tableCard: 'ACE',
+        pile: ['KING'],
+        pileCount: 1,
+        currentPlayerIndex: 0,
+        challengerIndex: null,
+        lastPlay: { playerId: OTHER_ID, playerName: 'Other', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: false },
+        roulettePlayerIds: [playerId],
+        roulettePhaseStartedAt,
+        roundNumber: 2,
+        winnerId: null,
+        version: 8,
+        createdAt: now - 20_000,
+        updatedAt: now - 20_000,
+        devilPlayerId: null,
+        devilRank: null,
+        settings: { bullets: 1 },
+      }
+    }
+
+    it('auto-pulls the pending shooter once the countdown has expired', async () => {
+      // ROULETTE_COUNTDOWN_MS is 10s — 11s ago is expired
+      const rouletteState = makeRouletteState(Date.now() - 11_000)
+      mockedGetGameState.mockResolvedValue(rouletteState)
+      mockedSetGameState.mockResolvedValue()
+      mockedProjectGameView.mockReturnValue({
+        status: 'playing', players: [], myHand: [], tableCard: null, pileCount: 0,
+        currentPlayerIndex: -1, challengerIndex: null, lastPlay: null, roulettePlayerIds: [],
+        roulettePhaseStartedAt: null, roundNumber: 1, winnerId: null, version: 1, myDevilRank: null,
+      })
+
+      const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}`)
+      await GET(request)
+
+      // One write for the lastSeenAt heartbeat, one for the auto-pull's real mutation
+      expect(mockedSetGameState).toHaveBeenCalledTimes(2)
+      const autoPulledState = mockedSetGameState.mock.calls[1][0] as GameState
+      expect(autoPulledState.roulettePlayerIds).not.toContain(playerId)
+      expect(mockedProjectGameView).toHaveBeenCalledWith(autoPulledState, playerId)
+    })
+
+    it('does not auto-pull before the countdown expires', async () => {
+      const rouletteState = makeRouletteState(Date.now() - 1000) // well within the 10s window
+      mockedGetGameState.mockResolvedValue(rouletteState)
+      mockedSetGameState.mockResolvedValue()
+      mockedProjectGameView.mockReturnValue({
+        status: 'roulette', players: [], myHand: [], tableCard: null, pileCount: 0,
+        currentPlayerIndex: -1, challengerIndex: null, lastPlay: null, roulettePlayerIds: [playerId],
+        roulettePhaseStartedAt: rouletteState.roulettePhaseStartedAt, roundNumber: 2, winnerId: null,
+        version: 9, myDevilRank: null,
+      })
+
+      const request = new NextRequest(`http://localhost/api/game/state?playerId=${playerId}&code=${code}`)
+      await GET(request)
+
+      // Only the lastSeenAt heartbeat write — no auto-pull mutation
+      expect(mockedSetGameState).toHaveBeenCalledTimes(1)
+    })
   })
 })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PlayCardsRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { getNextAlivePlayerIndex, isDevilCardPlay } from '@/lib/game-logic'
+import { applyCardPlay } from '@/lib/game-logic'
 import type { GameActionResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -25,107 +25,39 @@ export async function POST(request: NextRequest) {
         throw new Error('No active game session found')
       }
 
-      if (gameState.status !== 'playing') {
+      // Extended per docs/ui-redesign-round-table.md section 3: collapses the
+      // old standalone "believe" transition into this call. When called while
+      // status === 'challenge' by the designated challenger, this performs
+      // the believe-transition and the play atomically in the same lock —
+      // no separate endpoint, no two-fetch chaining from the client.
+      let effectiveState = gameState
+      let playerIndex: number
+
+      if (gameState.status === 'challenge') {
+        if (gameState.challengerIndex === null) throw new Error('No challenger set for this challenge')
+        const challenger = gameState.players[gameState.challengerIndex]
+        if (challenger.id !== playerId) throw new Error('Only the designated challenger can respond')
+        if (!challenger.isAlive) throw new Error('Eliminated players cannot challenge')
+        // Defensive: the UI only offers "Play" with a non-empty hand, so a
+        // safe (hand-empty) challenger should never reach this path, but the
+        // route must not trust that.
+        if (challenger.isSafe) throw new Error('Safe players cannot play cards')
+        effectiveState = {
+          ...gameState,
+          status: 'playing',
+          currentPlayerIndex: gameState.challengerIndex,
+          challengerIndex: null,
+          lastPlay: null,
+        }
+        playerIndex = gameState.challengerIndex
+      } else if (gameState.status === 'playing') {
+        playerIndex = gameState.players.findIndex(p => p.id === playerId)
+        if (playerIndex !== gameState.currentPlayerIndex) throw new Error('It is not your turn')
+      } else {
         throw new Error('Game is not in playing phase')
       }
 
-      const playerIndex = gameState.players.findIndex(p => p.id === playerId)
-      if (playerIndex === -1) {
-        throw new Error('Player not found in current game session')
-      }
-
-      const player = gameState.players[playerIndex]
-
-      if (!player.isAlive) {
-        throw new Error('Eliminated players cannot play cards')
-      }
-
-      if (playerIndex !== gameState.currentPlayerIndex) {
-        throw new Error('It is not your turn')
-      }
-
-      // Validate no duplicate indices
-      const uniqueIndices = new Set(cardIndices)
-      if (uniqueIndices.size !== cardIndices.length) {
-        throw new Error('Duplicate card indices are not allowed')
-      }
-
-      // Validate indices are within hand bounds
-      for (const idx of cardIndices) {
-        if (idx >= player.hand.length) {
-          throw new Error(`Card index ${idx} is out of range for hand of ${player.hand.length}`)
-        }
-      }
-
-      // Remove selected cards from hand
-      const playedCards = cardIndices.map(i => player.hand[i])
-
-      // Playing this game's flagged Devil rank completely alone automatically
-      // invokes its effect — there is no separate opt-in (docs/devil.card.md).
-      const isDevilPlay = isDevilCardPlay(gameState.devilPlayerId, gameState.devilRank, playerId, playedCards)
-
-      const newHand = player.hand.filter((_, i) => !cardIndices.includes(i))
-      const isSafe = newHand.length === 0
-
-      const newPile = [...gameState.pile, ...playedCards]
-
-      const updatedPlayers = gameState.players.map((p, i) =>
-        i === playerIndex
-          ? { ...p, hand: newHand, isSafe, lastSeenAt: Date.now() }
-          : p
-      )
-
-      const lastPlay = {
-        playerId,
-        playerName: player.name,
-        cards: playedCards,
-        claimedCount: cardIndices.length,
-        claimedCard: declaredCard,
-        isDevilPlay,
-      }
-
-      // The Devil Card's ability is spent for the rest of the round the moment
-      // it's played, regardless of the later challenge outcome — a new one is
-      // rolled on the next round reset (docs/devil.card.md).
-      const devilFieldsAfterPlay = isDevilPlay
-        ? { devilPlayerId: null, devilRank: null }
-        : { devilPlayerId: gameState.devilPlayerId, devilRank: gameState.devilRank }
-
-      // Only non-safe alive players can challenge — safe players sit out
-      const challengerIndex = getNextAlivePlayerIndex(updatedPlayers, playerIndex, true)
-
-      // No eligible challenger → this player is last with cards, auto-faces roulette
-      if (challengerIndex === null) {
-        const updatedGameState = {
-          ...gameState,
-          status: 'roulette' as const,
-          players: updatedPlayers,
-          pile: newPile,
-          pileCount: newPile.length,
-          challengerIndex: null,
-          lastPlay,
-          roulettePlayerIds: [playerId],
-          ...devilFieldsAfterPlay,
-          version: gameState.version + 1,
-          updatedAt: Date.now(),
-        }
-        await setGameState(updatedGameState)
-        return updatedGameState.version
-      }
-
-      const updatedGameState = {
-        ...gameState,
-        status: 'challenge' as const,
-        players: updatedPlayers,
-        pile: newPile,
-        pileCount: newPile.length,
-        challengerIndex,
-        lastPlay,
-        ...devilFieldsAfterPlay,
-        version: gameState.version + 1,
-        updatedAt: Date.now(),
-      }
-
+      const updatedGameState = applyCardPlay(effectiveState, playerIndex, cardIndices, declaredCard, Date.now())
       await setGameState(updatedGameState)
       return updatedGameState.version
     })

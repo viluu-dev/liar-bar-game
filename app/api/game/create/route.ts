@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
         challengerIndex: null,
         lastPlay: null,
         roulettePlayerIds: [],
+        roulettePhaseStartedAt: null,
         roundNumber: 1,
         winnerId: null,
         version: 0,

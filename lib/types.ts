@@ -90,6 +90,7 @@ export interface GameState {
   challengerIndex: number | null  // Who must challenge next
   lastPlay: LastPlay | null
   roulettePlayerIds: string[]     // Pending trigger-pullers (challenge loser, or every player but one on a Devil mass penalty)
+  roulettePhaseStartedAt: number | null // Date.now() when status last transitioned into 'roulette'; anchors the visible countdown
   roundNumber: number
   winnerId: string | null
   version: number                 // Monotonically increasing
@@ -116,6 +117,7 @@ export interface ProjectedGameState {
   challengerIndex: number | null
   lastPlay: ProjectedLastPlay | null
   roulettePlayerIds: string[]
+  roulettePhaseStartedAt: number | null
   roundNumber: number
   winnerId: string | null
   version: number

@@ -104,6 +104,7 @@ describe('/api/game/start', () => {
     challengerIndex: null,
     lastPlay: null,
     roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 1,
     winnerId: null,
     version: 5,

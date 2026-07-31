@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PlayCardsRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { getNextAlivePlayerIndex, isSoloOnlyViolation } from '@/lib/game-logic'
+import { getNextAlivePlayerIndex, isDevilCardPlay } from '@/lib/game-logic'
 import type { GameActionResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -60,9 +60,9 @@ export async function POST(request: NextRequest) {
       // Remove selected cards from hand
       const playedCards = cardIndices.map(i => player.hand[i])
 
-      if (isSoloOnlyViolation(playedCards)) {
-        throw new Error('The Devil Card must be played alone')
-      }
+      // Playing this game's flagged Devil rank completely alone automatically
+      // invokes its effect — there is no separate opt-in (docs/devil.card.md).
+      const isDevilPlay = isDevilCardPlay(gameState.devilPlayerId, gameState.devilRank, playerId, playedCards)
 
       const newHand = player.hand.filter((_, i) => !cardIndices.includes(i))
       const isSafe = newHand.length === 0
@@ -81,7 +81,15 @@ export async function POST(request: NextRequest) {
         cards: playedCards,
         claimedCount: cardIndices.length,
         claimedCard: declaredCard,
+        isDevilPlay,
       }
+
+      // The Devil Card's ability is spent for the rest of the round the moment
+      // it's played, regardless of the later challenge outcome — a new one is
+      // rolled on the next round reset (docs/devil.card.md).
+      const devilFieldsAfterPlay = isDevilPlay
+        ? { devilPlayerId: null, devilRank: null }
+        : { devilPlayerId: gameState.devilPlayerId, devilRank: gameState.devilRank }
 
       // Only non-safe alive players can challenge — safe players sit out
       const challengerIndex = getNextAlivePlayerIndex(updatedPlayers, playerIndex, true)
@@ -97,6 +105,7 @@ export async function POST(request: NextRequest) {
           challengerIndex: null,
           lastPlay,
           roulettePlayerIds: [playerId],
+          ...devilFieldsAfterPlay,
           version: gameState.version + 1,
           updatedAt: Date.now(),
         }
@@ -112,6 +121,7 @@ export async function POST(request: NextRequest) {
         pileCount: newPile.length,
         challengerIndex,
         lastPlay,
+        ...devilFieldsAfterPlay,
         version: gameState.version + 1,
         updatedAt: Date.now(),
       }

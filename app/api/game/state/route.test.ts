@@ -103,7 +103,9 @@ describe('/api/game/state GET', () => {
       winnerId: null,
       version: 5,
       createdAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      devilPlayerId: null,
+      devilRank: null
     }
 
     mockedGetGameState.mockResolvedValue(mockGameState)
@@ -145,7 +147,9 @@ describe('/api/game/state GET', () => {
       winnerId: null,
       version: 5,
       createdAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      devilPlayerId: null,
+      devilRank: null
     }
 
     mockedGetGameState.mockResolvedValue(mockGameState)
@@ -185,7 +189,9 @@ describe('/api/game/state GET', () => {
       winnerId: null,
       version: 3,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
+      devilPlayerId: null,
+      devilRank: null
     }
 
     const mockProjectedState = {
@@ -209,7 +215,8 @@ describe('/api/game/state GET', () => {
       roulettePlayerIds: [],
       roundNumber: 1,
       winnerId: null,
-      version: 4
+      version: 4,
+      myDevilRank: null
     }
 
     mockedGetGameState.mockResolvedValue(mockGameState)
@@ -266,7 +273,9 @@ describe('/api/game/state GET', () => {
       winnerId: null,
       version: 3,
       createdAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      devilPlayerId: null,
+      devilRank: null
     }
 
     const mockProjectedState = {
@@ -281,7 +290,8 @@ describe('/api/game/state GET', () => {
       roulettePlayerIds: [],
       roundNumber: 1,
       winnerId: null,
-      version: 3
+      version: 3,
+      myDevilRank: null
     }
 
     mockedGetGameState.mockResolvedValue(mockGameState)

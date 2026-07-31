@@ -100,6 +100,8 @@ describe('/api/game/shuffle', () => {
     version: 5,
     createdAt: 1000,
     updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides
   })
 

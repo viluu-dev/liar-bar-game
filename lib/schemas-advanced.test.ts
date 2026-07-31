@@ -49,14 +49,17 @@ describe('GameStateSchema', () => {
       playerName: 'Player2',
       cards: ['ACE', 'ACE'],
       claimedCount: 2,
-      claimedCard: 'ACE' as const
+      claimedCard: 'ACE' as const,
+      isDevilPlay: false
     },
     roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 42,
     createdAt: 1640995200000,
-    updatedAt: 1640995300000
+    updatedAt: 1640995300000,
+    devilPlayerId: null,
+    devilRank: null
   }
 
   it('should validate complete valid game state', () => {
@@ -159,7 +162,8 @@ describe('ProjectedGameStateSchema', () => {
     roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
-    version: 42
+    version: 42,
+    myDevilRank: null
   }
 
   it('should validate complete projected game state', () => {
@@ -198,7 +202,8 @@ describe('API Response Schemas', () => {
         roulettePlayerIds: [],
         roundNumber: 1,
         winnerId: null,
-        version: 42
+        version: 42,
+        myDevilRank: null
       }
     }
     expect(() => GameStateResponseSchema.parse(response)).not.toThrow()

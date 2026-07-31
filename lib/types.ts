@@ -4,7 +4,7 @@
  */
 
 // Card type definitions
-export type Card = 'ACE' | 'KING' | 'QUEEN' | 'JOKER' | 'DEVIL'
+export type Card = 'ACE' | 'KING' | 'QUEEN' | 'JOKER'
 export type TableCard = 'ACE' | 'KING' | 'QUEEN' // No Jokers as table cards
 
 // Game status enum for state machine
@@ -59,6 +59,7 @@ export interface LastPlay {
   cards: Card[]           // Server-only, revealed during challenges
   claimedCount: number    // How many cards claimed
   claimedCard: TableCard  // What they claimed to play
+  isDevilPlay: boolean    // Whether this play invoked the Devil Card effect
 }
 
 /**
@@ -71,6 +72,7 @@ export interface ProjectedLastPlay {
   claimedCount: number
   claimedCard: TableCard
   cards?: Card[] // revealed only during roulette status
+  isDevilPlay?: boolean // revealed only during roulette status, alongside cards
 }
 /**
 
@@ -96,6 +98,8 @@ export interface GameState {
   joinCode?: string
   settings?: GameSettings
   rematchPlayerIds?: string[] // players who clicked "Play Again"
+  devilPlayerId: string | null    // Player currently holding this round's unspent Devil Card effect
+  devilRank: TableCard | null     // Which rank (Ace/King/Queen) carries the Devil effect this round
 }
 
 /**
@@ -118,6 +122,7 @@ export interface ProjectedGameState {
   joinCode?: string
   settings?: GameSettings
   rematchPlayerIds?: string[] // players who clicked "Play Again"
+  myDevilRank: TableCard | null // Set only if the requesting player holds this round's Devil Card
 }
 
 /**

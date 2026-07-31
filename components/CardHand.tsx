@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, GameStatus } from '@/lib/types'
+import { Card, GameStatus, TableCard } from '@/lib/types'
 
 interface CardHandProps {
   cards: Card[]
   isMyTurn: boolean
   gameStatus: GameStatus
+  myDevilRank: TableCard | null
   onPlay?: (selectedIndices: number[]) => Promise<void>
 }
 
@@ -15,7 +16,6 @@ const cardSymbols = {
   KING: '♠K',
   QUEEN: '♠Q',
   JOKER: '🃏',
-  DEVIL: '😈'
 } as const
 
 const cardColors = {
@@ -23,10 +23,9 @@ const cardColors = {
   KING: 'text-yellow-400',
   QUEEN: 'text-purple-400',
   JOKER: 'text-green-400',
-  DEVIL: 'text-red-600'
 } as const
 
-export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHandProps) {
+export default function CardHand({ cards, isMyTurn, gameStatus, myDevilRank, onPlay }: CardHandProps) {
   const [selectedIndices, setSelectedIndices] = useState<number[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -43,9 +42,6 @@ export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHa
     if (!canInteract) return
     setSelectedIndices(prev => {
       if (prev.includes(index)) return prev.filter(i => i !== index)
-      // The Devil Card must be played strictly alone
-      if (cards[index] === 'DEVIL') return [index]
-      if (prev.some(i => cards[i] === 'DEVIL')) return prev
       if (prev.length >= 3) return prev
       return [...prev, index]
     })
@@ -62,6 +58,11 @@ export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHa
       setIsSubmitting(false)
     }
   }
+
+  // Playing this card completely alone automatically invokes its Devil
+  // effect — there's no separate opt-in, so this is purely informational.
+  const willInvokeDevil =
+    myDevilRank !== null && selectedIndices.length === 1 && cards[selectedIndices[0]] === myDevilRank
 
   if (cards.length === 0) {
     return (
@@ -89,6 +90,7 @@ export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHa
             card={card}
             canInteract={canInteract}
             isSelected={selectedIndices.includes(index)}
+            isDevilRank={myDevilRank !== null && card === myDevilRank}
             onTap={() => handleCardTap(index)}
           />
         ))}
@@ -96,11 +98,15 @@ export default function CardHand({ cards, isMyTurn, gameStatus, onPlay }: CardHa
 
       {canInteract && (
         <div className="mt-3 text-xs text-gray-400 min-h-[1rem]">
-          {selectedIndices.length === 1 && cards[selectedIndices[0]] === 'DEVIL'
-            ? '😈 Devil Card selected — must be played alone'
-            : selectedIndices.length === 0
-              ? 'Tap to select 1–3 cards to play'
-              : `${selectedIndices.length} card${selectedIndices.length !== 1 ? 's' : ''} selected`}
+          {selectedIndices.length === 0
+            ? 'Tap to select 1–3 cards to play'
+            : `${selectedIndices.length} card${selectedIndices.length !== 1 ? 's' : ''} selected`}
+        </div>
+      )}
+
+      {canInteract && willInvokeDevil && (
+        <div className="mt-2 text-xs text-red-400">
+          😈 Playing this card alone invokes the Devil effect
         </div>
       )}
 
@@ -138,10 +144,11 @@ interface CardComponentProps {
   card: Card
   canInteract: boolean
   isSelected: boolean
+  isDevilRank: boolean
   onTap: () => void
 }
 
-function CardComponent({ card, canInteract, isSelected, onTap }: CardComponentProps) {
+function CardComponent({ card, canInteract, isSelected, isDevilRank, onTap }: CardComponentProps) {
   return (
     <div
       onClick={onTap}
@@ -165,6 +172,11 @@ function CardComponent({ card, canInteract, isSelected, onTap }: CardComponentPr
       {isSelected && (
         <div className="absolute -top-2 -right-2 w-5 h-5 bg-yellow-400 rounded-full flex items-center justify-center text-xs text-black font-bold leading-none">
           ✓
+        </div>
+      )}
+      {isDevilRank && (
+        <div className="absolute -top-2 -left-2 w-5 h-5 bg-red-600 rounded-full flex items-center justify-center text-xs leading-none">
+          😈
         </div>
       )}
     </div>

@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { MAX_PLAYERS } from './constants'
 
 // Card type schemas
-export const CardSchema = z.enum(['ACE', 'KING', 'QUEEN', 'JOKER', 'DEVIL'])
+export const CardSchema = z.enum(['ACE', 'KING', 'QUEEN', 'JOKER'])
 export const TableCardSchema = z.enum(['ACE', 'KING', 'QUEEN'])
 export const GameStatusSchema = z.enum(['lobby', 'playing', 'challenge', 'roulette', 'finished'])
 
@@ -50,7 +50,8 @@ export const LastPlaySchema = z.object({
   playerName: z.string().min(1).max(50).trim(),
   cards: z.array(CardSchema).min(1).max(3),
   claimedCount: z.number().int().min(1).max(3),
-  claimedCard: TableCardSchema
+  claimedCard: TableCardSchema,
+  isDevilPlay: z.boolean(),
 })
 
 // Projected last play schema for client responses
@@ -60,6 +61,7 @@ export const ProjectedLastPlaySchema = z.object({
   claimedCount: z.number().int().min(1).max(3),
   claimedCard: TableCardSchema,
   cards: z.array(CardSchema).min(1).max(3).optional(),
+  isDevilPlay: z.boolean().optional(),
 })
 
 // Complete game state validation schema
@@ -82,6 +84,8 @@ export const GameStateSchema = z.object({
   joinCode: z.string().length(4).optional(),
   settings: GameSettingsSchema.optional(),
   rematchPlayerIds: z.array(z.string().uuid()).optional(),
+  devilPlayerId: z.string().uuid().nullable(),
+  devilRank: TableCardSchema.nullable(),
 })
 
 // Projected game state schema for client responses
@@ -101,6 +105,7 @@ export const ProjectedGameStateSchema = z.object({
   joinCode: z.string().length(4).optional(),
   settings: GameSettingsSchema.optional(),
   rematchPlayerIds: z.array(z.string().uuid()).optional(),
+  myDevilRank: TableCardSchema.nullable(),
 })
 
 // API Request validation schemas

@@ -5,7 +5,7 @@ import type { Card, ProjectedLastPlay, ProjectedPlayer, TableCard } from '@/lib/
 import ChamberDots from './ChamberDots'
 
 interface ChallengeRevealProps {
-  lastPlay: ProjectedLastPlay & { cards: Card[] }
+  lastPlay: ProjectedLastPlay & { cards: Card[]; isDevilPlay: boolean }
   tableCard: TableCard
   pendingShooters: ProjectedPlayer[]
   players: ProjectedPlayer[]
@@ -18,7 +18,6 @@ const cardSymbols: Record<Card, string> = {
   KING: '♠K',
   QUEEN: '♠Q',
   JOKER: '🃏',
-  DEVIL: '😈',
 }
 
 const cardColors: Record<Card, string> = {
@@ -26,11 +25,10 @@ const cardColors: Record<Card, string> = {
   KING: 'text-yellow-400',
   QUEEN: 'text-purple-400',
   JOKER: 'text-green-400',
-  DEVIL: 'text-red-600',
 }
 
-function isValidCard(card: Card, tableCard: TableCard): boolean {
-  return card === tableCard || card === 'JOKER' || card === 'DEVIL'
+function isValidCard(card: Card, tableCard: TableCard, isDevilPlay: boolean): boolean {
+  return isDevilPlay || card === tableCard || card === 'JOKER'
 }
 
 export default function ChallengeReveal({
@@ -44,9 +42,8 @@ export default function ChallengeReveal({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const { playerName, claimedCount, claimedCard, cards } = lastPlay
-  const isDevilPlay = cards.length === 1 && cards[0] === 'DEVIL'
-  const allValid = cards.every(c => isValidCard(c, tableCard))
+  const { playerName, claimedCount, claimedCard, cards, isDevilPlay } = lastPlay
+  const allValid = cards.every(c => isValidCard(c, tableCard, isDevilPlay))
   const me = pendingShooters.find(p => p.id === playerId)
   const isShooter = me !== undefined
   const chamberIndex = me?.chamberIndex
@@ -80,7 +77,7 @@ export default function ChallengeReveal({
         </p>
         <div className="flex justify-center gap-2">
           {cards.map((card, i) => {
-            const valid = isValidCard(card, tableCard)
+            const valid = isValidCard(card, tableCard, isDevilPlay)
             return (
               <div
                 key={i}
@@ -101,7 +98,7 @@ export default function ChallengeReveal({
                     wild
                   </div>
                 )}
-                {card === 'DEVIL' && (
+                {isDevilPlay && i === 0 && (
                   <div className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold px-1 rounded">
                     devil
                   </div>

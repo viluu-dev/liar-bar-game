@@ -15,6 +15,7 @@ vi.mock('@/lib/game-logic', async (importOriginal) => {
   return {
     ...actual,
     selectTableCard: vi.fn(() => 'KING' as const),
+    selectDevilCard: vi.fn(() => ({ handIndex: 0, rank: 'QUEEN' as const })),
   }
 })
 
@@ -55,13 +56,15 @@ describe('/api/game/roulette', () => {
     pileCount: 2,
     currentPlayerIndex: 0,
     challengerIndex: null,
-    lastPlay: { playerId: PLAYER2_UUID, playerName: 'Bob', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE' },
+    lastPlay: { playerId: PLAYER2_UUID, playerName: 'Bob', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: false },
     roulettePlayerIds: [LOSER_UUID],
     roundNumber: 2,
     winnerId: null,
     version: 8,
     createdAt: 1000,
     updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides,
   })
 
@@ -121,6 +124,32 @@ describe('/api/game/roulette', () => {
             expect.objectContaining({ id: LOSER_UUID, isSafe: false }),
           ]),
         })
+      )
+    })
+
+    it('leaves devilPlayerId/devilRank null on round reset when no Devil Card was ever assigned', async () => {
+      mockGetGameState.mockResolvedValue(makeState({ settings: { bullets: 1, devilMode: false } }))
+      await POST(makeRequest({ playerId: LOSER_UUID, joinCode: 'TEST' }))
+
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({ devilPlayerId: null, devilRank: null })
+      )
+    })
+
+    it('re-rolls the Devil Card assignment from the new hands on round reset', async () => {
+      // The Devil Card is re-rolled every round reset — the previous round's
+      // assignment (here, Bob/PLAYER2_UUID) is discarded even though it was
+      // never played, and the mocked selectDevilCard's pick (handIndex 0,
+      // which maps to the first alive player, Alice/LOSER_UUID) is used instead.
+      mockGetGameState.mockResolvedValue(makeState({
+        settings: { bullets: 1, devilMode: true },
+        devilPlayerId: PLAYER2_UUID,
+        devilRank: 'KING',
+      }))
+      await POST(makeRequest({ playerId: LOSER_UUID, joinCode: 'TEST' }))
+
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({ devilPlayerId: LOSER_UUID, devilRank: 'QUEEN' })
       )
     })
   })
@@ -208,17 +237,20 @@ describe('/api/game/roulette', () => {
       ],
       deck: [],
       tableCard: 'ACE',
-      pile: ['DEVIL'],
+      pile: ['KING'],
       pileCount: 1,
       currentPlayerIndex: 0,
       challengerIndex: null,
-      lastPlay: { playerId: DEVIL_UUID, playerName: 'Dana', cards: ['DEVIL'], claimedCount: 1, claimedCard: 'ACE' },
+      lastPlay: { playerId: DEVIL_UUID, playerName: 'Dana', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: true },
       roulettePlayerIds: [SHOOTER1_UUID, SHOOTER2_UUID],
       roundNumber: 2,
       winnerId: null,
       version: 8,
       createdAt: 1000,
       updatedAt: 1000,
+      // The Devil Card's ability is spent the moment it was played (see play/route.ts).
+      devilPlayerId: null,
+      devilRank: null,
       ...overrides,
     })
 

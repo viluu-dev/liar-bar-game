@@ -152,7 +152,8 @@ describe('LastPlaySchema', () => {
     playerName: 'TestPlayer',
     cards: ['ACE', 'ACE'],
     claimedCount: 2,
-    claimedCard: 'ACE'
+    claimedCard: 'ACE',
+    isDevilPlay: false
   }
 
   it('should validate valid last play', () => {

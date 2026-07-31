@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createInitialDeck, createDeckForPlayerCount, getDeckComposition, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive, isSoloOnlyViolation } from './game-logic'
+import { createInitialDeck, createDeckForPlayerCount, getDeckComposition, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive, isDevilCardPlay, selectDevilCard } from './game-logic'
 import type { Card, TableCard } from './types'
 
 describe('createInitialDeck', () => {
@@ -76,21 +76,6 @@ describe('getDeckComposition / createDeckForPlayerCount', () => {
       const total = composition.reduce((sum, c) => sum + c.count, 0)
 
       expect(createDeckForPlayerCount(playerCount)).toHaveLength(total)
-    }
-  })
-
-  it('does not include a Devil Card when devilMode is false (default)', () => {
-    for (let playerCount = 2; playerCount <= 8; playerCount++) {
-      expect(getDeckComposition(playerCount).find(c => c.card === 'DEVIL')).toBeUndefined()
-      expect(createDeckForPlayerCount(playerCount)).not.toContain('DEVIL')
-    }
-  })
-
-  it('includes exactly one Devil Card when devilMode is true, regardless of player count', () => {
-    for (let playerCount = 2; playerCount <= 8; playerCount++) {
-      const composition = getDeckComposition(playerCount, true)
-      expect(composition.find(c => c.card === 'DEVIL')?.count).toBe(1)
-      expect(createDeckForPlayerCount(playerCount, true).filter(c => c === 'DEVIL')).toHaveLength(1)
     }
   })
 })
@@ -254,31 +239,6 @@ describe('dealCards', () => {
 
     expect(result.playerHands).toHaveLength(4)
     expect(result.remainingDeck).toHaveLength(0)
-  })
-
-  describe('guaranteed Devil Card delivery', () => {
-    it('always deals the Devil Card to a player, never leaves it in the remaining deck', () => {
-      for (let playerCount = 2; playerCount <= 8; playerCount++) {
-        for (let trial = 0; trial < 20; trial++) {
-          const deck = shuffleDeck(createDeckForPlayerCount(playerCount, true))
-          const result = dealCards(deck, playerCount)
-
-          expect(result.remainingDeck).not.toContain('DEVIL')
-          const devilCount = result.playerHands.reduce(
-            (sum, hand) => sum + hand.filter(c => c === 'DEVIL').length,
-            0
-          )
-          expect(devilCount).toBe(1)
-        }
-      }
-    })
-
-    it('is a no-op when the Devil Card is not present in the deck', () => {
-      const deck = createInitialDeck() // no DEVIL in a devilMode-off deck
-      const result = dealCards(deck, 4)
-      expect(result.remainingDeck).not.toContain('DEVIL')
-      expect(result.playerHands.flat()).not.toContain('DEVIL')
-    })
   })
 })
 
@@ -526,26 +486,75 @@ describe('resolveChallenge', () => {
     expect(result.invalidCards).toEqual(['QUEEN'])
   })
 
-  it('treats a lone Devil Card as valid against any table card', () => {
-    const result = resolveChallenge(['DEVIL'], 'KING')
-    expect(result.isValid).toBe(true)
-    expect(result.invalidCards).toHaveLength(0)
+})
+
+describe('isDevilCardPlay', () => {
+  const PLAYER = 'player-1'
+  const OTHER = 'player-2'
+
+  it('returns true when the holder plays exactly the flagged rank alone', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['KING'])).toBe(true)
+  })
+
+  it('returns false when the flagged rank is combined with other cards', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['KING', 'KING'])).toBe(false)
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['KING', 'ACE'])).toBe(false)
+  })
+
+  it('returns false when a different player plays the flagged rank', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', OTHER, ['KING'])).toBe(false)
+  })
+
+  it('returns false when the holder plays a different rank', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['ACE'])).toBe(false)
+  })
+
+  it('returns false when there is no Devil Card in play', () => {
+    expect(isDevilCardPlay(null, null, PLAYER, ['KING'])).toBe(false)
   })
 })
 
-describe('isSoloOnlyViolation', () => {
-  it('returns false for a lone Devil Card', () => {
-    expect(isSoloOnlyViolation(['DEVIL'])).toBe(false)
+describe('selectDevilCard', () => {
+  let originalGetRandomValues: any
+
+  beforeEach(() => {
+    originalGetRandomValues = global.crypto.getRandomValues
   })
 
-  it('returns true when the Devil Card is combined with other cards', () => {
-    expect(isSoloOnlyViolation(['DEVIL', 'ACE'])).toBe(true)
-    expect(isSoloOnlyViolation(['KING', 'DEVIL', 'QUEEN'])).toBe(true)
+  afterEach(() => {
+    global.crypto.getRandomValues = originalGetRandomValues
   })
 
-  it('returns false for normal multi-card plays without the Devil Card', () => {
-    expect(isSoloOnlyViolation(['ACE', 'KING'])).toBe(false)
-    expect(isSoloOnlyViolation(['JOKER', 'JOKER', 'JOKER'])).toBe(false)
+  it('returns null when no hand contains an eligible Ace/King/Queen', () => {
+    const hands: Card[][] = [['JOKER', 'JOKER'], ['JOKER']]
+    expect(selectDevilCard(hands)).toBeNull()
+  })
+
+  it('never picks a Joker', () => {
+    const hands: Card[][] = [['JOKER', 'JOKER', 'JOKER', 'JOKER'], ['KING', 'JOKER']]
+    global.crypto.getRandomValues = vi.fn().mockImplementation((array: Uint32Array) => {
+      array[0] = 0 // only one eligible card exists: the KING in hand 1
+    })
+    const pick = selectDevilCard(hands)
+    expect(pick).toEqual({ handIndex: 1, rank: 'KING' })
+  })
+
+  it('picks uniformly over eligible card-slots via the mocked random index', () => {
+    const hands: Card[][] = [['ACE', 'KING'], ['QUEEN']]
+    // Eligible slots in encounter order: (0,ACE), (0,KING), (1,QUEEN)
+    global.crypto.getRandomValues = vi.fn().mockImplementation((array: Uint32Array) => {
+      array[0] = 2
+    })
+    expect(selectDevilCard(hands)).toEqual({ handIndex: 1, rank: 'QUEEN' })
+  })
+
+  it('gives a player holding more of the flagged rank proportionally higher odds', () => {
+    // Hand 0 holds three Kings, hand 1 holds one Queen — 4 eligible slots total.
+    const hands: Card[][] = [['KING', 'KING', 'KING'], ['QUEEN']]
+    global.crypto.getRandomValues = vi.fn().mockImplementation((array: Uint32Array) => {
+      array[0] = 1 // second eligible slot -> still hand 0's second King
+    })
+    expect(selectDevilCard(hands)).toEqual({ handIndex: 0, rank: 'KING' })
   })
 })
 

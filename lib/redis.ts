@@ -284,7 +284,11 @@ export function projectGameView(
     ...(player.chamberIndex !== undefined && { chamberIndex: player.chamberIndex }),
   }))
 
-  // Reveal actual cards only during roulette (challenge resolved, cards exposed to all)
+  // Reveal actual cards (and whether it was a Devil play) only during
+  // roulette (challenge resolved, cards exposed to all) — revealing
+  // isDevilPlay any earlier would tell the challenger a challenge is
+  // guaranteed to fail before they decide, which is information they never
+  // had access to under the old, unrevealed-until-played Devil Card.
   let projectedLastPlay = null
   if (state.lastPlay) {
     projectedLastPlay = {
@@ -292,7 +296,7 @@ export function projectGameView(
       playerName: state.lastPlay.playerName,
       claimedCount: state.lastPlay.claimedCount,
       claimedCard: state.lastPlay.claimedCard,
-      ...(state.status === 'roulette' && { cards: state.lastPlay.cards }),
+      ...(state.status === 'roulette' && { cards: state.lastPlay.cards, isDevilPlay: state.lastPlay.isDevilPlay }),
     }
   }
 
@@ -306,6 +310,7 @@ export function projectGameView(
     challengerIndex: state.challengerIndex,
     lastPlay: projectedLastPlay,
     roulettePlayerIds: state.roulettePlayerIds,
+    myDevilRank: state.devilPlayerId === playerId ? state.devilRank : null,
     roundNumber: state.roundNumber,
     winnerId: state.winnerId,
     version: state.version,

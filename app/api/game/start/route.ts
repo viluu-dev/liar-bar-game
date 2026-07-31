@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { StartGameRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { createDeckForPlayerCount, shuffleDeck, dealCards, selectTableCard, initChamber } from '@/lib/game-logic'
+import { createDeckForPlayerCount, shuffleDeck, dealCards, selectTableCard, initChamber, selectDevilCard } from '@/lib/game-logic'
 import { MIN_PLAYERS } from '@/lib/constants'
 import type { GameActionResponse } from '@/lib/types'
 
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       const finalSettings = { bullets: finalBullets, devilMode: finalDevilMode }
 
       // Create and shuffle the deck, scaled for the current player count
-      const initialDeck = createDeckForPlayerCount(gameState.players.length, finalDevilMode)
+      const initialDeck = createDeckForPlayerCount(gameState.players.length)
       const shuffledDeck = shuffleDeck(initialDeck)
 
       // Deal 5 cards to each player
@@ -63,6 +63,11 @@ export async function POST(request: NextRequest) {
 
       // Select a random Table Card for this round
       const tableCard = selectTableCard()
+
+      // Flag one dealt Ace/King/Queen as this round's Devil Card
+      const devilPick = finalDevilMode ? selectDevilCard(dealResult.playerHands) : null
+      const devilPlayerId = devilPick ? gameState.players[devilPick.handIndex].id : null
+      const devilRank = devilPick?.rank ?? null
 
       // Each player gets their own chamber
       const playersWithHands = gameState.players.map((player, index) => ({
@@ -85,6 +90,8 @@ export async function POST(request: NextRequest) {
         challengerIndex: null,
         lastPlay: null,
         settings: finalSettings,
+        devilPlayerId,
+        devilRank,
         version: gameState.version + 1,
         updatedAt: Date.now(),
       }

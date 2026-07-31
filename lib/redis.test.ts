@@ -129,6 +129,8 @@ describe('Redis Client and State Management', () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
         joinCode: 'ABCD',
+        devilPlayerId: null,
+        devilRank: null,
       }
 
       mockRedis.get.mockResolvedValueOnce(validGameState) // game:state:ABCD
@@ -169,6 +171,8 @@ describe('Redis Client and State Management', () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
       joinCode: 'ABCD',
+      devilPlayerId: null,
+      devilRank: null,
     }
 
     it('should store valid game state with TTL under code-based key', async () => {
@@ -279,6 +283,7 @@ describe('Redis Client and State Management', () => {
         cards: ['ACE', 'KING'] as Card[],
         claimedCount: 2,
         claimedCard: 'ACE',
+        isDevilPlay: false,
       },
       roulettePlayerIds: [],
       roundNumber: 1,
@@ -286,6 +291,8 @@ describe('Redis Client and State Management', () => {
       version: 5,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      devilPlayerId: null,
+      devilRank: null,
     })
 
     it('should return projected game state for requesting player', () => {
@@ -330,6 +337,7 @@ describe('Redis Client and State Management', () => {
           // cards field omitted
         },
         roulettePlayerIds: [],
+        myDevilRank: null,
         roundNumber: 1,
         winnerId: null,
         version: 5,
@@ -351,6 +359,28 @@ describe('Redis Client and State Management', () => {
       const projected = projectGameView(gameState, 'player1')
 
       expect(projected.lastPlay).toBeNull()
+    })
+
+    it('should only expose myDevilRank to the actual holder', () => {
+      const gameState = createTestGameState()
+      gameState.devilPlayerId = 'player1'
+      gameState.devilRank = 'KING'
+
+      expect(projectGameView(gameState, 'player1').myDevilRank).toBe('KING')
+      expect(projectGameView(gameState, 'player2').myDevilRank).toBeNull()
+      expect('devilPlayerId' in projectGameView(gameState, 'player1')).toBe(false)
+    })
+
+    it('should redact isDevilPlay on lastPlay until status is roulette', () => {
+      const gameState = createTestGameState()
+      gameState.lastPlay!.isDevilPlay = true
+
+      const duringChallenge = projectGameView(gameState, 'player2')
+      expect(duringChallenge.lastPlay).not.toHaveProperty('isDevilPlay')
+
+      gameState.status = 'roulette'
+      const duringRoulette = projectGameView(gameState, 'player2')
+      expect(duringRoulette.lastPlay?.isDevilPlay).toBe(true)
     })
   })
 

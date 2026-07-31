@@ -63,7 +63,9 @@ export async function POST(request: NextRequest) {
         createdAt: now,
         updatedAt: now,
         joinCode,
-        settings: { bullets, devilMode }
+        settings: { bullets, devilMode },
+        devilPlayerId: null,
+        devilRank: null,
       }
 
       await setGameState(initialGameState)

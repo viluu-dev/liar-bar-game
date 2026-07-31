@@ -78,8 +78,7 @@ export async function POST(request: NextRequest) {
       // Devil Card: always a valid wildcard, so the challenge fails outright —
       // but instead of the normal single-loser outcome, every OTHER alive
       // player (safe or not) must face the revolver (docs/devil.card.md).
-      const isDevilPlay =
-        gameState.lastPlay.cards.length === 1 && gameState.lastPlay.cards[0] === 'DEVIL'
+      const isDevilPlay = gameState.lastPlay.isDevilPlay
 
       if (isDevilPlay) {
         const devilPlayerId = gameState.lastPlay.playerId

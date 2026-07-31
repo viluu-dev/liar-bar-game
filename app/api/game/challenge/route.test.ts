@@ -47,6 +47,7 @@ describe('/api/game/challenge', () => {
       cards: ['ACE', 'KING'],
       claimedCount: 2,
       claimedCard: 'KING',
+      isDevilPlay: false,
     },
     roulettePlayerIds: [],
     roundNumber: 1,
@@ -54,6 +55,8 @@ describe('/api/game/challenge', () => {
     version: 5,
     createdAt: 1000,
     updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides,
   })
 
@@ -178,7 +181,8 @@ describe('/api/game/challenge', () => {
   describe('liar — Devil Card mass penalty', () => {
     it('sets roulettePlayerIds to every other alive player, not just the challenger', async () => {
       const state = makeState()
-      state.lastPlay!.cards = ['DEVIL']
+      state.lastPlay!.cards = ['KING']
+      state.lastPlay!.isDevilPlay = true
       mockGetGameState.mockResolvedValue(state)
 
       const res = await POST(makeRequest({ playerId: PLAYER_B, joinCode: 'TEST', action: 'liar' }))
@@ -195,7 +199,8 @@ describe('/api/game/challenge', () => {
 
     it('excludes already-eliminated players from the mass penalty', async () => {
       const state = makeState()
-      state.lastPlay!.cards = ['DEVIL']
+      state.lastPlay!.cards = ['KING']
+      state.lastPlay!.isDevilPlay = true
       state.players[2].isAlive = false // Carol already eliminated
       mockGetGameState.mockResolvedValue(state)
 
@@ -208,13 +213,26 @@ describe('/api/game/challenge', () => {
 
     it('never marks the Devil player themselves as needing to pull', async () => {
       const state = makeState()
-      state.lastPlay!.cards = ['DEVIL']
+      state.lastPlay!.cards = ['KING']
+      state.lastPlay!.isDevilPlay = true
       mockGetGameState.mockResolvedValue(state)
 
       await POST(makeRequest({ playerId: PLAYER_B, joinCode: 'TEST', action: 'liar' }))
 
       const updatedState = mockSetGameState.mock.calls[0][0] as GameState
       expect(updatedState.roulettePlayerIds).not.toContain(PLAYER_A)
+    })
+
+    it('does not trigger the mass penalty for a normal (non-invoked) play of the flagged rank', async () => {
+      const state = makeState()
+      state.lastPlay!.cards = ['KING', 'KING'] // honest, matches tableCard, isDevilPlay stays false
+      mockGetGameState.mockResolvedValue(state)
+
+      await POST(makeRequest({ playerId: PLAYER_B, joinCode: 'TEST', action: 'liar' }))
+
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({ roulettePlayerIds: [PLAYER_B] })
+      )
     })
   })
 

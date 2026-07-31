@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { RouletteRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { createDeckForPlayerCount, shuffleDeck, dealCards, selectTableCard, initChamber, getNextAlivePlayerIndex } from '@/lib/game-logic'
+import { createDeckForPlayerCount, shuffleDeck, dealCards, selectTableCard, initChamber, getNextAlivePlayerIndex, selectDevilCard } from '@/lib/game-logic'
 import type { RouletteResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -99,16 +99,24 @@ export async function POST(request: NextRequest) {
       }
 
       // Round reset — reshuffle and deal new hands to all alive players
-      const devilMode = gameState.settings?.devilMode ?? false
-      const newDeck = shuffleDeck(createDeckForPlayerCount(alivePlayers.length, devilMode))
+      const newDeck = shuffleDeck(createDeckForPlayerCount(alivePlayers.length))
       const { playerHands, remainingDeck } = dealCards(newDeck, alivePlayers.length)
+
+      // The Devil Card is re-rolled every round reset, from this round's fresh
+      // hands — any leftover assignment from the previous round is discarded
+      // even if it was never played (docs/devil.card.md). playerHands is
+      // ordered the same as alivePlayers (both walk updatedPlayers in order),
+      // so handIndex maps directly onto alivePlayers.
+      const finalDevilMode = gameState.settings?.devilMode ?? false
+      const devilPick = finalDevilMode ? selectDevilCard(playerHands) : null
+      const devilPlayerId = devilPick ? alivePlayers[devilPick.handIndex].id : null
+      const devilRank = devilPick?.rank ?? null
 
       // A Devil mass penalty has no single "trigger puller" to anchor the next
       // round on — the Devil player (who never pulls) starts it instead. For a
       // normal single-loser round, the player who pulled the trigger starts the
       // next round if they survived; otherwise the next alive player after them.
-      const isDevilRound =
-        gameState.lastPlay?.cards.length === 1 && gameState.lastPlay.cards[0] === 'DEVIL'
+      const isDevilRound = gameState.lastPlay?.isDevilPlay ?? false
       const nextRoundStartIndex = isDevilRound
         ? gameState.players.findIndex(p => p.id === gameState.lastPlay!.playerId)
         : eliminated
@@ -145,6 +153,8 @@ export async function POST(request: NextRequest) {
         roulettePlayerIds: [],
         roundNumber: gameState.roundNumber + 1,
         winnerId: null,
+        devilPlayerId,
+        devilRank,
         version: gameState.version + 1,
         updatedAt: Date.now(),
       }

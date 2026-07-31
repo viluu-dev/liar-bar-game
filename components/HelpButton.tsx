@@ -14,14 +14,13 @@ const CARD_LABELS: Record<string, string> = {
   KING: 'King',
   QUEEN: 'Queen',
   JOKER: 'Joker',
-  DEVIL: 'Devil',
 }
 const CARDS_PER_HAND = 5
 
 export default function HelpButton({ playerCount, bullets, devilMode }: HelpButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
 
-  const composition = getDeckComposition(playerCount ?? 4, devilMode ?? false)
+  const composition = getDeckComposition(playerCount ?? 4)
   const deckSize = composition.reduce((sum, c) => sum + c.count, 0)
   const cardsDealt = playerCount ? playerCount * CARDS_PER_HAND : null
   const cardsRemaining = cardsDealt !== null ? deckSize - cardsDealt : null
@@ -66,7 +65,7 @@ export default function HelpButton({ playerCount, bullets, devilMode }: HelpButt
               <li>Emptying your hand makes you safe for the rest of the round.</li>
               <li>Last player alive wins.</li>
               {devilMode && (
-                <li>😈 Devil Mode: one Devil Card is in play. It must be played alone and always counts as a match. If challenged, the challenge fails and every other player must pull the trigger.</li>
+                <li>😈 Devil Mode: once per game, one random Ace/King/Queen dealt to a player is secretly the Devil Card. Playing it completely alone automatically invokes it — it always counts as a match. If challenged, the challenge fails and every other player must pull the trigger. It's spent once played, for the rest of the game.</li>
               )}
             </ul>
 

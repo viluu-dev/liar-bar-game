@@ -163,7 +163,7 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
           gameState.roulettePlayerIds.length > 0 &&
           gameState.tableCard ? (
           <ChallengeReveal
-            lastPlay={gameState.lastPlay as typeof gameState.lastPlay & { cards: NonNullable<typeof gameState.lastPlay.cards> }}
+            lastPlay={gameState.lastPlay as typeof gameState.lastPlay & { cards: NonNullable<typeof gameState.lastPlay.cards>; isDevilPlay: boolean }}
             tableCard={gameState.tableCard}
             pendingShooters={gameState.players.filter(p => gameState.roulettePlayerIds.includes(p.id))}
             players={gameState.players}
@@ -179,6 +179,7 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
               cards={gameState.myHand}
               isMyTurn={gameState.players[gameState.currentPlayerIndex]?.id === playerId}
               gameStatus={gameState.status}
+              myDevilRank={gameState.myDevilRank}
               onPlay={handlePlay}
             />
           </>

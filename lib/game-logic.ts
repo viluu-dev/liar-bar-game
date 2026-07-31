@@ -11,31 +11,24 @@ import { MIN_PLAYERS, MAX_PLAYERS } from './constants'
  * Preserves the same Ace:King:Queen:Joker ratio (3:3:3:1) as the original
  * 4-player deck (6/6/6/2) at every table size, scaling up or down so each
  * player can always be dealt a 5-card hand with a small (0-2 card) surplus.
- *
- * When `devilMode` is enabled, exactly one Devil Card is added regardless of
- * player count (docs/devil.card.md: "exactly one (1) Devil Card... per round").
  */
-export function getDeckComposition(playerCount: number, devilMode: boolean = false): { card: Card; count: number }[] {
+export function getDeckComposition(playerCount: number): { card: Card; count: number }[] {
   const perRank = Math.round(playerCount * 1.5)
   const jokers = Math.round(playerCount * 0.5)
-  const composition: { card: Card; count: number }[] = [
+  return [
     { card: 'ACE', count: perRank },
     { card: 'KING', count: perRank },
     { card: 'QUEEN', count: perRank },
     { card: 'JOKER', count: jokers },
   ]
-  if (devilMode) {
-    composition.push({ card: 'DEVIL', count: 1 })
-  }
-  return composition
 }
 
 /**
  * Creates a deck scaled for `playerCount` players (see getDeckComposition).
  */
-export function createDeckForPlayerCount(playerCount: number, devilMode: boolean = false): Card[] {
+export function createDeckForPlayerCount(playerCount: number): Card[] {
   const deck: Card[] = []
-  for (const { card, count } of getDeckComposition(playerCount, devilMode)) {
+  for (const { card, count } of getDeckComposition(playerCount)) {
     for (let i = 0; i < count; i++) {
       deck.push(card)
     }
@@ -101,22 +94,6 @@ export function dealCards(deck: Card[], playerCount: number): DealResult {
     throw new Error('Not enough cards in deck to deal 5 cards per player')
   }
 
-  const dealtCount = playerCount * 5
-
-  // The Devil Card must always reach a player's hand, never sit undealt in the
-  // surplus remainder. If it landed past the dealt range, swap it into a
-  // uniformly random dealt position so delivery is guaranteed without biasing
-  // which player receives it.
-  let workingDeck = deck
-  const devilIndex = deck.indexOf('DEVIL')
-  if (devilIndex !== -1 && devilIndex >= dealtCount) {
-    workingDeck = [...deck]
-    const randomArray = new Uint32Array(1)
-    crypto.getRandomValues(randomArray)
-    const swapIndex = randomArray[0] % dealtCount
-    ;[workingDeck[devilIndex], workingDeck[swapIndex]] = [workingDeck[swapIndex], workingDeck[devilIndex]]
-  }
-
   const playerHands: Card[][] = []
   let deckIndex = 0
 
@@ -124,14 +101,14 @@ export function dealCards(deck: Card[], playerCount: number): DealResult {
   for (let player = 0; player < playerCount; player++) {
     const hand: Card[] = []
     for (let card = 0; card < 5; card++) {
-      hand.push(workingDeck[deckIndex])
+      hand.push(deck[deckIndex])
       deckIndex++
     }
     playerHands.push(hand)
   }
 
   // Return remaining cards in deck
-  const remainingDeck = workingDeck.slice(deckIndex)
+  const remainingDeck = deck.slice(deckIndex)
 
   return {
     playerHands,
@@ -228,14 +205,16 @@ export function initChamber(bullets: number): boolean[] {
 
 /**
  * Resolves a "liar" challenge by checking the played cards against the table card.
- * Jokers and the Devil Card count as valid wildcards for any table card.
+ * Jokers count as valid wildcards for any table card. A play that invokes the
+ * Devil Card effect never reaches this function — it auto-fails the challenge
+ * before resolveChallenge is called (see app/api/game/challenge/route.ts).
  *
  * @param cards Actual cards that were played (from lastPlay.cards)
  * @param tableCard The declared table card for this round
  * @returns ChallengeResult with isValid flag and list of invalid cards
  */
 export function resolveChallenge(cards: Card[], tableCard: TableCard): ChallengeResult {
-  const invalidCards = cards.filter(c => c !== tableCard && c !== 'JOKER' && c !== 'DEVIL')
+  const invalidCards = cards.filter(c => c !== tableCard && c !== 'JOKER')
   return {
     isValid: invalidCards.length === 0,
     invalidCards,
@@ -243,11 +222,56 @@ export function resolveChallenge(cards: Card[], tableCard: TableCard): Challenge
 }
 
 /**
- * The Devil Card must be played strictly alone — it can never be combined
- * with other cards in the same play (docs/devil.card.md).
+ * Determines whether a play automatically invokes the Devil Card effect:
+ * the player must hold this game's Devil designation, and must play exactly
+ * that flagged rank completely alone. Combining it with other cards (or
+ * playing a different card) is just an ordinary play — there is no separate
+ * opt-in, invoking is entirely a side effect of playing it solo
+ * (docs/devil.card.md).
  */
-export function isSoloOnlyViolation(cards: Card[]): boolean {
-  return cards.includes('DEVIL') && cards.length > 1
+export function isDevilCardPlay(
+  devilPlayerId: string | null,
+  devilRank: TableCard | null,
+  playerId: string,
+  cards: Card[]
+): boolean {
+  return playerId === devilPlayerId && devilRank !== null && cards.length === 1 && cards[0] === devilRank
+}
+
+/**
+ * Randomly flags one dealt card as the Devil Card for the current round.
+ * Called at game start and again on every round reset, each time against
+ * that round's freshly dealt hands — any unplayed assignment from the
+ * previous round is discarded (docs/devil.card.md). Only Ace, King, or
+ * Queen are eligible (Jokers are already a universal wildcard, so stacking
+ * the Devil effect on one would be redundant). Selection is uniform over
+ * eligible card-slots (not over players), so a player holding more of the
+ * flagged rank has proportionally better odds of holding it.
+ *
+ * @param hands Freshly dealt hands, indexed as returned by dealCards
+ * @returns The hand index and rank chosen, or null if no hand holds an
+ *          eligible card (unreachable in practice given deck ratios, but
+ *          handled defensively rather than throwing)
+ */
+export function selectDevilCard(hands: Card[][]): { handIndex: number; rank: TableCard } | null {
+  const eligible: { handIndex: number; rank: TableCard }[] = []
+  hands.forEach((hand, handIndex) => {
+    hand.forEach(card => {
+      if (card === 'ACE' || card === 'KING' || card === 'QUEEN') {
+        eligible.push({ handIndex, rank: card })
+      }
+    })
+  })
+
+  if (eligible.length === 0) {
+    return null
+  }
+
+  const randomArray = new Uint32Array(1)
+  crypto.getRandomValues(randomArray)
+  const index = randomArray[0] % eligible.length
+
+  return eligible[index]
 }
 
 /**

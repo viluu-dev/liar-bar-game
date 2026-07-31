@@ -63,6 +63,8 @@ describe('/api/game/play', () => {
     version: 3,
     createdAt: 1000,
     updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides,
   })
 
@@ -217,22 +219,8 @@ describe('/api/game/play', () => {
   })
 
   describe('Devil Card', () => {
-    it('rejects playing the Devil Card combined with other cards', async () => {
-      const state = makeGameState()
-      state.players[0].hand = ['DEVIL', 'KING', 'QUEEN', 'JOKER', 'ACE']
-      mockGetGameState.mockResolvedValue(state)
-
-      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0, 1], declaredCard: 'KING' }))
-      const body = await res.json()
-
-      expect(res.status).toBe(400)
-      expect(body.error).toBe('The Devil Card must be played alone')
-      expect(mockSetGameState).not.toHaveBeenCalled()
-    })
-
-    it('allows playing the Devil Card alone', async () => {
-      const state = makeGameState()
-      state.players[0].hand = ['DEVIL', 'KING', 'QUEEN', 'JOKER', 'ACE']
+    it('automatically invokes the Devil Card when the holder plays the flagged rank alone', async () => {
+      const state = makeGameState({ devilPlayerId: HOST_UUID, devilRank: 'ACE' })
       mockGetGameState.mockResolvedValue(state)
       mockSetGameState.mockResolvedValue()
 
@@ -242,7 +230,80 @@ describe('/api/game/play', () => {
       expect(mockSetGameState).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'challenge',
-          lastPlay: expect.objectContaining({ cards: ['DEVIL'], claimedCard: 'KING' }),
+          lastPlay: expect.objectContaining({ cards: ['ACE'], claimedCard: 'KING', isDevilPlay: true }),
+          devilPlayerId: null,
+          devilRank: null,
+        })
+      )
+    })
+
+    it('does not invoke the Devil Card when the flagged rank is combined with other cards', async () => {
+      // Host's hand is ['ACE', 'KING', 'QUEEN', 'JOKER', 'ACE'] — index 0 (ACE)
+      // matches the flagged rank, but combining it with index 1 forfeits the effect.
+      const state = makeGameState({ devilPlayerId: HOST_UUID, devilRank: 'ACE' })
+      mockGetGameState.mockResolvedValue(state)
+      mockSetGameState.mockResolvedValue()
+
+      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0, 1], declaredCard: 'KING' }))
+
+      expect(res.status).toBe(200)
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastPlay: expect.objectContaining({ isDevilPlay: false }),
+          devilPlayerId: HOST_UUID,
+          devilRank: 'ACE',
+        })
+      )
+    })
+
+    it('does not invoke the Devil Card for a different player holding the same rank', async () => {
+      const state = makeGameState({ devilPlayerId: PLAYER2_UUID, devilRank: 'ACE' })
+      mockGetGameState.mockResolvedValue(state)
+      mockSetGameState.mockResolvedValue()
+
+      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+
+      expect(res.status).toBe(200)
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastPlay: expect.objectContaining({ isDevilPlay: false }),
+          devilPlayerId: PLAYER2_UUID,
+          devilRank: 'ACE',
+        })
+      )
+    })
+
+    it('does not invoke the Devil Card when the holder plays a different rank alone', async () => {
+      const state = makeGameState({ devilPlayerId: HOST_UUID, devilRank: 'ACE' })
+      mockGetGameState.mockResolvedValue(state)
+      mockSetGameState.mockResolvedValue()
+
+      // hand[1] is 'KING', which does not match the flagged 'ACE' rank
+      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [1], declaredCard: 'KING' }))
+
+      expect(res.status).toBe(200)
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastPlay: expect.objectContaining({ isDevilPlay: false }),
+          devilPlayerId: HOST_UUID,
+          devilRank: 'ACE',
+        })
+      )
+    })
+
+    it('leaves devilPlayerId/devilRank untouched when no Devil Card is in play', async () => {
+      const state = makeGameState({ devilPlayerId: null, devilRank: null })
+      mockGetGameState.mockResolvedValue(state)
+      mockSetGameState.mockResolvedValue()
+
+      const res = await POST(makeRequest({ playerId: HOST_UUID, joinCode: 'TEST', cardIndices: [0], declaredCard: 'KING' }))
+
+      expect(res.status).toBe(200)
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastPlay: expect.objectContaining({ isDevilPlay: false }),
+          devilPlayerId: null,
+          devilRank: null,
         })
       )
     })

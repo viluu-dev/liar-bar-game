@@ -42,7 +42,7 @@ describe('/api/game/rematch', () => {
     pileCount: 1,
     currentPlayerIndex: 1,
     challengerIndex: null,
-    lastPlay: { playerId: HOST_UUID, playerName: 'Alice', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE' },
+    lastPlay: { playerId: HOST_UUID, playerName: 'Alice', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: false },
     roulettePlayerIds: [HOST_UUID],
     roundNumber: 3,
     winnerId: PLAYER2_UUID,
@@ -51,6 +51,8 @@ describe('/api/game/rematch', () => {
     updatedAt: 2000,
     joinCode: 'ABCD',
     settings: { bullets: 1 },
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides,
   })
 
@@ -77,6 +79,8 @@ describe('/api/game/rematch', () => {
     joinCode: 'ABCD',
     settings: { bullets: 1 },
     rematchPlayerIds: [HOST_UUID],
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides,
   })
 

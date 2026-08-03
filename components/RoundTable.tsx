@@ -32,6 +32,11 @@ export default function RoundTable({
 
   return (
     <div className="relative w-full aspect-square max-w-sm mx-auto">
+      {/* Table surface — a small circle behind the pile, sized well inside the seat ring so it never overlaps the seats */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-[55%] h-[55%] rounded-full bg-gray-900/60 border border-gray-700 shadow-inner" />
+      </div>
+
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <PlayedPile pileCount={pileCount} tableCard={tableCard} roundNumber={roundNumber} />
       </div>

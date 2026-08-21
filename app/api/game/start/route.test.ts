@@ -17,7 +17,7 @@ vi.mock('@/lib/redis', () => ({
 }))
 
 vi.mock('@/lib/game-logic', () => ({
-  createInitialDeck: vi.fn(() => [
+  createDeckForPlayerCount: vi.fn(() => [
     'ACE', 'ACE', 'ACE', 'ACE', 'ACE', 'ACE',
     'KING', 'KING', 'KING', 'KING', 'KING', 'KING',
     'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN', 'QUEEN',
@@ -33,6 +33,7 @@ vi.mock('@/lib/game-logic', () => ({
   })),
   selectTableCard: vi.fn(() => 'ACE'),
   initChamber: vi.fn(() => [false, false, false, false, false, false]),
+  selectDevilCard: vi.fn(() => ({ handIndex: 0, rank: 'KING' })),
 }))
 
 describe('/api/game/start', () => {
@@ -102,12 +103,15 @@ describe('/api/game/start', () => {
     currentPlayerIndex: -1,
     challengerIndex: null,
     lastPlay: null,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 1,
     winnerId: null,
     version: 5,
     createdAt: 1000,
     updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides
   })
 
@@ -228,6 +232,32 @@ describe('/api/game/start', () => {
           pileCount: 0,
           lastPlay: null
         })
+      )
+    })
+  })
+
+  describe('Devil Card assignment', () => {
+    it('leaves devilPlayerId/devilRank null when devilMode is off (default)', async () => {
+      mockGetGameState.mockResolvedValue(createTestGameState())
+      mockSetGameState.mockResolvedValue()
+
+      await POST(createMockRequest({ playerId: HOST_UUID, joinCode: 'TEST' }))
+
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({ devilPlayerId: null, devilRank: null })
+      )
+    })
+
+    it('flags the selected hand/rank as this round\'s Devil Card when devilMode is on', async () => {
+      mockGetGameState.mockResolvedValue(createTestGameState())
+      mockSetGameState.mockResolvedValue()
+
+      await POST(createMockRequest({ playerId: HOST_UUID, joinCode: 'TEST', devilMode: true }))
+
+      // The mocked selectDevilCard returns { handIndex: 0, rank: 'KING' },
+      // and dealResult.playerHands[0] maps to gameState.players[0] (HOST_UUID).
+      expect(mockSetGameState).toHaveBeenCalledWith(
+        expect.objectContaining({ devilPlayerId: HOST_UUID, devilRank: 'KING' })
       )
     })
   })

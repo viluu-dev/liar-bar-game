@@ -13,6 +13,12 @@ class NotInGameError extends Error {
   constructor() { super('Player not in game'); this.name = 'NotInGameError' }
 }
 
+interface RouletteFlashEvent {
+  playerName: string
+  survived: boolean
+  isMe: boolean
+}
+
 async function fetchGameState(playerId: string, joinCode: string): Promise<GameStateResponse> {
   const res = await fetch(`/api/game/state?playerId=${encodeURIComponent(playerId)}&code=${encodeURIComponent(joinCode)}`)
   if (res.status === 404) throw new NotInGameError()
@@ -27,12 +33,11 @@ export default function GamePage() {
   const errorCountRef = useRef(0)
   const [isReconnecting, setIsReconnecting] = useState(false)
   const prevDataRef = useRef<GameStateResponse | null>(null)
-  const [rouletteFlash, setRouletteFlash] = useState<{
-    playerName: string
-    survived: boolean
-    isMe: boolean
-  } | null>(null)
-  const clearFlash = useCallback(() => setRouletteFlash(null), [])
+  const rouletteFlashQueueRef = useRef<RouletteFlashEvent[]>([])
+  const [rouletteFlash, setRouletteFlash] = useState<RouletteFlashEvent | null>(null)
+  const advanceFlashQueue = useCallback(() => {
+    setRouletteFlash(rouletteFlashQueueRef.current.shift() ?? null)
+  }, [])
 
   useEffect(() => {
     const id = localStorage.getItem('liars-bar-player-id')
@@ -71,28 +76,31 @@ export default function GamePage() {
     }
   )
 
-  // Detect roulette resolution → show full-screen result for 2s
+  // Detect roulette resolution(s) → queue a full-screen result flash per player
+  // who just pulled. Diffing roulettePlayerIds (rather than the overall status)
+  // catches every individual pull during a Devil mass penalty, not just the
+  // one that ends the phase.
   useEffect(() => {
     const prev = prevDataRef.current
-    if (
-      prev?.gameState?.status === 'roulette' &&
-      data?.gameState &&
-      data.gameState.status !== 'roulette' &&
-      !rouletteFlash
-    ) {
-      const roulettePlayerId = prev.gameState.roulettePlayerId
-      const player = prev.gameState.players.find(p => p.id === roulettePlayerId)
-      const currPlayer = data.gameState.players.find(p => p.id === roulettePlayerId)
-      if (player) {
-        setRouletteFlash({
+    if (prev?.gameState && data?.gameState) {
+      const currPending = new Set(data.gameState.roulettePlayerIds)
+      const resolvedIds = prev.gameState.roulettePlayerIds.filter(id => !currPending.has(id))
+      for (const id of resolvedIds) {
+        const player = prev.gameState.players.find(p => p.id === id)
+        if (!player) continue
+        const currPlayer = data.gameState.players.find(p => p.id === id)
+        rouletteFlashQueueRef.current.push({
           playerName: player.name,
           survived: currPlayer?.isAlive ?? false,
-          isMe: roulettePlayerId === playerId,
+          isMe: id === playerId,
         })
+      }
+      if (resolvedIds.length > 0 && !rouletteFlash) {
+        advanceFlashQueue()
       }
     }
     prevDataRef.current = data ?? null
-  }, [data, playerId, rouletteFlash])
+  }, [data, playerId, rouletteFlash, advanceFlashQueue])
 
   // Redirect to lobby if game hasn't started
   useEffect(() => {
@@ -144,6 +152,7 @@ export default function GamePage() {
       <HelpButton
         playerCount={data.gameState.players.length}
         bullets={data.gameState.settings?.bullets}
+        devilMode={data.gameState.settings?.devilMode}
       />
       {isReconnecting && (
         <div className="fixed top-0 inset-x-0 z-50 bg-yellow-600 text-black text-center text-xs font-semibold py-1">
@@ -155,7 +164,7 @@ export default function GamePage() {
           playerName={rouletteFlash.playerName}
           survived={rouletteFlash.survived}
           isMe={rouletteFlash.isMe}
-          onDone={clearFlash}
+          onDone={advanceFlashQueue}
         />
       )}
       <GameScreen gameState={data.gameState} playerId={playerId} joinCode={joinCode} />

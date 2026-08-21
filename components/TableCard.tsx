@@ -4,8 +4,6 @@ import { TableCard as TableCardType } from '@/lib/types'
 
 interface TableCardProps {
   card: TableCardType | null
-  pileCount: number
-  roundNumber: number
 }
 
 const cardSymbols = {
@@ -20,7 +18,7 @@ const cardColors = {
   QUEEN: 'text-purple-400'
 } as const
 
-export default function TableCard({ card, pileCount, roundNumber }: TableCardProps) {
+export default function TableCard({ card }: TableCardProps) {
   if (!card) {
     return (
       <div className="text-center py-8">
@@ -31,11 +29,6 @@ export default function TableCard({ card, pileCount, roundNumber }: TableCardPro
 
   return (
     <div className="text-center">
-      {/* Round Information */}
-      <div className="mb-2 text-sm text-gray-400">
-        Round {roundNumber} • {pileCount} cards in pile
-      </div>
-      
       {/* Table Card Display */}
       <div className="bg-gray-800 rounded-xl p-6 mx-auto max-w-xs border-2 border-gray-600">
         <div className="text-sm text-gray-400 mb-2">Table Card</div>

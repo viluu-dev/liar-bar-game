@@ -1,26 +1,29 @@
 'use client'
 
 import { useState } from 'react'
+import { getDeckComposition } from '@/lib/game-logic'
 
 interface HelpButtonProps {
   playerCount?: number
   bullets?: number
+  devilMode?: boolean
 }
 
-const DECK_COMPOSITION = [
-  { label: 'Ace', count: 6 },
-  { label: 'King', count: 6 },
-  { label: 'Queen', count: 6 },
-  { label: 'Joker', count: 2 },
-]
-const DECK_SIZE = DECK_COMPOSITION.reduce((sum, c) => sum + c.count, 0)
+const CARD_LABELS: Record<string, string> = {
+  ACE: 'Ace',
+  KING: 'King',
+  QUEEN: 'Queen',
+  JOKER: 'Joker',
+}
 const CARDS_PER_HAND = 5
 
-export default function HelpButton({ playerCount, bullets }: HelpButtonProps) {
+export default function HelpButton({ playerCount, bullets, devilMode }: HelpButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
 
+  const composition = getDeckComposition(playerCount ?? 4)
+  const deckSize = composition.reduce((sum, c) => sum + c.count, 0)
   const cardsDealt = playerCount ? playerCount * CARDS_PER_HAND : null
-  const cardsRemaining = cardsDealt !== null ? DECK_SIZE - cardsDealt : null
+  const cardsRemaining = cardsDealt !== null ? deckSize - cardsDealt : null
 
   return (
     <>
@@ -53,7 +56,7 @@ export default function HelpButton({ playerCount, bullets }: HelpButtonProps) {
             </div>
 
             <ul className="text-gray-300 space-y-2 text-sm list-disc list-inside">
-              <li>2-6 players are each dealt 5 cards from a 20-card deck.</li>
+              <li>2-8 players are each dealt 5 cards; the deck scales in size with the table.</li>
               <li>Each round has a Table Card (Ace, King, or Queen).</li>
               <li>On your turn, play 1-3 cards face-down, claiming they all match the Table Card. Jokers count as any card.</li>
               <li>The next player either Believes (play passes to them) or calls Liar.</li>
@@ -61,14 +64,17 @@ export default function HelpButton({ playerCount, bullets }: HelpButtonProps) {
               <li>Pulling the trigger risks elimination — survive and the round continues.</li>
               <li>Emptying your hand makes you safe for the rest of the round.</li>
               <li>Last player alive wins.</li>
+              {devilMode && (
+                <li>😈 Devil Mode: once per game, one random Ace/King/Queen dealt to a player is secretly the Devil Card. Playing it completely alone automatically invokes it — it always counts as a match. If challenged, the challenge fails and every other player must pull the trigger. It's spent once played, for the rest of the game.</li>
+              )}
             </ul>
 
             <div className="border-t border-gray-700 pt-4">
-              <h3 className="text-sm font-semibold text-white mb-2">Deck composition (20 cards)</h3>
+              <h3 className="text-sm font-semibold text-white mb-2">Deck composition ({deckSize} cards)</h3>
               <ul className="text-gray-400 text-sm space-y-1">
-                {DECK_COMPOSITION.map(c => (
-                  <li key={c.label} className="flex justify-between">
-                    <span>{c.label}</span>
+                {composition.map(c => (
+                  <li key={c.card} className="flex justify-between">
+                    <span>{CARD_LABELS[c.card]}</span>
                     <span>{c.count}</span>
                   </li>
                 ))}

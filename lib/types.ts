@@ -10,6 +10,12 @@ export type TableCard = 'ACE' | 'KING' | 'QUEEN' // No Jokers as table cards
 // Game status enum for state machine
 export type GameStatus = 'lobby' | 'playing' | 'challenge' | 'roulette' | 'finished'
 
+// Game settings shared by create/start requests and persisted game state
+export interface GameSettings {
+  bullets: number
+  devilMode?: boolean
+}
+
 /**
  * Player interface - complete server-side player state
  * Contains private data that must be filtered in client projections
@@ -53,6 +59,7 @@ export interface LastPlay {
   cards: Card[]           // Server-only, revealed during challenges
   claimedCount: number    // How many cards claimed
   claimedCard: TableCard  // What they claimed to play
+  isDevilPlay: boolean    // Whether this play invoked the Devil Card effect
 }
 
 /**
@@ -65,6 +72,7 @@ export interface ProjectedLastPlay {
   claimedCount: number
   claimedCard: TableCard
   cards?: Card[] // revealed only during roulette status
+  isDevilPlay?: boolean // revealed only during roulette status, alongside cards
 }
 /**
 
@@ -81,15 +89,18 @@ export interface GameState {
   currentPlayerIndex: number      // Index into players[]
   challengerIndex: number | null  // Who must challenge next
   lastPlay: LastPlay | null
-  roulettePlayerId: string | null // Challenge loser
+  roulettePlayerIds: string[]     // Pending trigger-pullers (challenge loser, or every player but one on a Devil mass penalty)
+  roulettePhaseStartedAt: number | null // Date.now() when status last transitioned into 'roulette'; anchors the visible countdown
   roundNumber: number
   winnerId: string | null
   version: number                 // Monotonically increasing
   createdAt: number
   updatedAt: number
   joinCode?: string
-  settings?: { bullets: number }
+  settings?: GameSettings
   rematchPlayerIds?: string[] // players who clicked "Play Again"
+  devilPlayerId: string | null    // Player currently holding this round's unspent Devil Card effect
+  devilRank: TableCard | null     // Which rank (Ace/King/Queen) carries the Devil effect this round
 }
 
 /**
@@ -105,13 +116,15 @@ export interface ProjectedGameState {
   currentPlayerIndex: number
   challengerIndex: number | null
   lastPlay: ProjectedLastPlay | null
-  roulettePlayerId: string | null
+  roulettePlayerIds: string[]
+  roulettePhaseStartedAt: number | null
   roundNumber: number
   winnerId: string | null
   version: number
   joinCode?: string
-  settings?: { bullets: number }
+  settings?: GameSettings
   rematchPlayerIds?: string[] // players who clicked "Play Again"
+  myDevilRank: TableCard | null // Set only if the requesting player holds this round's Devil Card
 }
 
 /**
@@ -155,7 +168,7 @@ export interface RouletteResponse extends GameActionResponse {
 
 export interface CreateGameRequest {
   playerName: string
-  settings?: { bullets: number }
+  settings?: GameSettings
 }
 
 export interface JoinGameRequest {
@@ -167,6 +180,7 @@ export interface StartGameRequest {
   playerId: string
   joinCode: string
   bullets?: number
+  devilMode?: boolean
 }
 
 export interface KickPlayerRequest {

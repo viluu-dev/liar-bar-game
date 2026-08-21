@@ -118,12 +118,14 @@ describe('Game state validation', () => {
     currentPlayerIndex: -1,
     challengerIndex: null,
     lastPlay: null,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 0,
     createdAt: 1640995200000,
-    updatedAt: 1640995200000
+    updatedAt: 1640995200000,
+    devilPlayerId: null,
+    devilRank: null
   }
 
   const validProjectedGameState = {
@@ -135,10 +137,11 @@ describe('Game state validation', () => {
     currentPlayerIndex: -1,
     challengerIndex: null,
     lastPlay: null,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
-    version: 0
+    version: 0,
+    myDevilRank: null
   }
 
   it('should validate game state', () => {

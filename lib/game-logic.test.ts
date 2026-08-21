@@ -3,8 +3,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive } from './game-logic'
-import type { Card, TableCard } from './types'
+import { createInitialDeck, createDeckForPlayerCount, getDeckComposition, shuffleDeck, dealCards, selectTableCard, validatePlay, getNextAlivePlayerIndex, resolveChallenge, autoSkipIfInactive, isDevilCardPlay, selectDevilCard, applyCardPlay, applyRoulettePull, autoPullIfRouletteExpired } from './game-logic'
+import { ROULETTE_COUNTDOWN_MS } from './constants'
+import type { Card, TableCard, GameState } from './types'
 
 describe('createInitialDeck', () => {
   it('should create a deck with exactly 20 cards', () => {
@@ -31,9 +32,52 @@ describe('createInitialDeck', () => {
   it('should return a new array each time (not cached)', () => {
     const deck1 = createInitialDeck()
     const deck2 = createInitialDeck()
-    
+
     expect(deck1).not.toBe(deck2) // Different array instances
     expect(deck1).toEqual(deck2) // Same contents
+  })
+})
+
+describe('getDeckComposition / createDeckForPlayerCount', () => {
+  it('matches the canonical 6/6/6/2 composition at 4 players', () => {
+    const composition = getDeckComposition(4)
+    const counts = Object.fromEntries(composition.map(c => [c.card, c.count]))
+
+    expect(counts.ACE).toBe(6)
+    expect(counts.KING).toBe(6)
+    expect(counts.QUEEN).toBe(6)
+    expect(counts.JOKER).toBe(2)
+    expect(createDeckForPlayerCount(4)).toHaveLength(20)
+  })
+
+  it('never produces a deck smaller than 5 cards per player, for every supported player count', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      const deck = createDeckForPlayerCount(playerCount)
+      const surplus = deck.length - playerCount * 5
+
+      expect(deck.length).toBeGreaterThanOrEqual(playerCount * 5)
+      expect([0, 2]).toContain(surplus)
+    }
+  })
+
+  it('keeps Ace, King, and Queen counts equal at every player count (preserves ratio)', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      const composition = getDeckComposition(playerCount)
+      const counts = Object.fromEntries(composition.map(c => [c.card, c.count]))
+
+      expect(counts.ACE).toBe(counts.KING)
+      expect(counts.KING).toBe(counts.QUEEN)
+      expect(counts.JOKER).toBeLessThan(counts.ACE)
+    }
+  })
+
+  it('createDeckForPlayerCount total length matches the sum of getDeckComposition counts', () => {
+    for (let playerCount = 2; playerCount <= 8; playerCount++) {
+      const composition = getDeckComposition(playerCount)
+      const total = composition.reduce((sum, c) => sum + c.count, 0)
+
+      expect(createDeckForPlayerCount(playerCount)).toHaveLength(total)
+    }
   })
 })
 
@@ -153,24 +197,35 @@ describe('dealCards', () => {
 
   it('should throw error for invalid player count', () => {
     const deck = createInitialDeck()
-    
-    expect(() => dealCards(deck, 1)).toThrow('Player count must be between 2 and 6')
-    expect(() => dealCards(deck, 7)).toThrow('Player count must be between 2 and 6')
-    expect(() => dealCards(deck, 0)).toThrow('Player count must be between 2 and 6')
-    expect(() => dealCards(deck, -1)).toThrow('Player count must be between 2 and 6')
+
+    expect(() => dealCards(deck, 1)).toThrow('Player count must be between 2 and 8')
+    expect(() => dealCards(deck, 9)).toThrow('Player count must be between 2 and 8')
+    expect(() => dealCards(deck, 0)).toThrow('Player count must be between 2 and 8')
+    expect(() => dealCards(deck, -1)).toThrow('Player count must be between 2 and 8')
   })
 
   it('should throw error if not enough cards in deck', () => {
     const smallDeck: Card[] = ['ACE', 'KING', 'QUEEN'] // Only 3 cards
-    
+
     expect(() => dealCards(smallDeck, 2)).toThrow('Not enough cards in deck to deal 5 cards per player')
   })
 
-  it('should handle maximum 6 players with enough cards', () => {
-    // Create a larger deck to test 6 players scenario  
-    const largeDeck: Card[] = new Array(30).fill('ACE') as Card[] // 30 cards for 6 players
-    const result = dealCards(largeDeck, 6) // 6 * 5 = 30 cards
-    
+  it('should handle maximum 8 players with enough cards', () => {
+    // Create a larger deck to test 8 players scenario
+    const largeDeck: Card[] = new Array(40).fill('ACE') as Card[] // 40 cards for 8 players
+    const result = dealCards(largeDeck, 8) // 8 * 5 = 40 cards
+
+    expect(result.playerHands).toHaveLength(8)
+    expect(result.remainingDeck).toHaveLength(0)
+    result.playerHands.forEach(hand => {
+      expect(hand).toHaveLength(5)
+    })
+  })
+
+  it('should succeed with 6 players using a deck scaled for 6 players', () => {
+    const deck = createDeckForPlayerCount(6) // 30 cards, scaled for 6 players
+
+    const result = dealCards(deck, 6)
     expect(result.playerHands).toHaveLength(6)
     expect(result.remainingDeck).toHaveLength(0)
     result.playerHands.forEach(hand => {
@@ -178,18 +233,11 @@ describe('dealCards', () => {
     })
   })
 
-  it('should fail with 6 players and standard 20-card deck', () => {
-    const deck = createInitialDeck() // Only 20 cards
-    
-    // This should throw because we need 30 cards but only have 20
-    expect(() => dealCards(deck, 6)).toThrow('Not enough cards in deck to deal 5 cards per player')
-  })
-
   it('should work with exactly enough cards', () => {
     // Create deck with exactly enough cards for 4 players
     const deck: Card[] = new Array(20).fill('ACE') as Card[]
     const result = dealCards(deck, 4) // 4 * 5 = 20 cards
-    
+
     expect(result.playerHands).toHaveLength(4)
     expect(result.remainingDeck).toHaveLength(0)
   })
@@ -438,6 +486,77 @@ describe('resolveChallenge', () => {
     expect(result.isValid).toBe(false)
     expect(result.invalidCards).toEqual(['QUEEN'])
   })
+
+})
+
+describe('isDevilCardPlay', () => {
+  const PLAYER = 'player-1'
+  const OTHER = 'player-2'
+
+  it('returns true when the holder plays exactly the flagged rank alone', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['KING'])).toBe(true)
+  })
+
+  it('returns false when the flagged rank is combined with other cards', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['KING', 'KING'])).toBe(false)
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['KING', 'ACE'])).toBe(false)
+  })
+
+  it('returns false when a different player plays the flagged rank', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', OTHER, ['KING'])).toBe(false)
+  })
+
+  it('returns false when the holder plays a different rank', () => {
+    expect(isDevilCardPlay(PLAYER, 'KING', PLAYER, ['ACE'])).toBe(false)
+  })
+
+  it('returns false when there is no Devil Card in play', () => {
+    expect(isDevilCardPlay(null, null, PLAYER, ['KING'])).toBe(false)
+  })
+})
+
+describe('selectDevilCard', () => {
+  let originalGetRandomValues: any
+
+  beforeEach(() => {
+    originalGetRandomValues = global.crypto.getRandomValues
+  })
+
+  afterEach(() => {
+    global.crypto.getRandomValues = originalGetRandomValues
+  })
+
+  it('returns null when no hand contains an eligible Ace/King/Queen', () => {
+    const hands: Card[][] = [['JOKER', 'JOKER'], ['JOKER']]
+    expect(selectDevilCard(hands)).toBeNull()
+  })
+
+  it('never picks a Joker', () => {
+    const hands: Card[][] = [['JOKER', 'JOKER', 'JOKER', 'JOKER'], ['KING', 'JOKER']]
+    global.crypto.getRandomValues = vi.fn().mockImplementation((array: Uint32Array) => {
+      array[0] = 0 // only one eligible card exists: the KING in hand 1
+    })
+    const pick = selectDevilCard(hands)
+    expect(pick).toEqual({ handIndex: 1, rank: 'KING' })
+  })
+
+  it('picks uniformly over eligible card-slots via the mocked random index', () => {
+    const hands: Card[][] = [['ACE', 'KING'], ['QUEEN']]
+    // Eligible slots in encounter order: (0,ACE), (0,KING), (1,QUEEN)
+    global.crypto.getRandomValues = vi.fn().mockImplementation((array: Uint32Array) => {
+      array[0] = 2
+    })
+    expect(selectDevilCard(hands)).toEqual({ handIndex: 1, rank: 'QUEEN' })
+  })
+
+  it('gives a player holding more of the flagged rank proportionally higher odds', () => {
+    // Hand 0 holds three Kings, hand 1 holds one Queen — 4 eligible slots total.
+    const hands: Card[][] = [['KING', 'KING', 'KING'], ['QUEEN']]
+    global.crypto.getRandomValues = vi.fn().mockImplementation((array: Uint32Array) => {
+      array[0] = 1 // second eligible slot -> still hand 0's second King
+    })
+    expect(selectDevilCard(hands)).toEqual({ handIndex: 0, rank: 'KING' })
+  })
 })
 
 describe('getNextAlivePlayerIndex', () => {
@@ -486,6 +605,296 @@ describe('getNextAlivePlayerIndex', () => {
   it('correctly skips fromIndex when wrapping', () => {
     // fromIndex=2 (last), next is index 0 (wraps)
     expect(getNextAlivePlayerIndex([alive, dead, alive], 2)).toBe(0)
+  })
+})
+
+describe('applyCardPlay', () => {
+  const PLAYER_A = 'player-a'
+  const PLAYER_B = 'player-b'
+  const NOW = 2_000_000
+
+  const makeState = (overrides: Partial<GameState> = {}): GameState => ({
+    status: 'playing',
+    players: [
+      { id: PLAYER_A, name: 'Alice', hand: ['ACE', 'KING', 'QUEEN'], isAlive: true, isSafe: false, isHost: true, joinedAt: 1000, lastSeenAt: 1000 },
+      { id: PLAYER_B, name: 'Bob', hand: ['KING', 'QUEEN'], isAlive: true, isSafe: false, isHost: false, joinedAt: 1001, lastSeenAt: 1001 },
+    ],
+    deck: [],
+    tableCard: 'KING',
+    pile: [],
+    pileCount: 0,
+    currentPlayerIndex: 0,
+    challengerIndex: null,
+    lastPlay: null,
+    roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
+    roundNumber: 1,
+    winnerId: null,
+    version: 3,
+    createdAt: 1000,
+    updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
+    ...overrides,
+  })
+
+  it('plays a card, adds it to the pile, and sets the next challenger', () => {
+    const result = applyCardPlay(makeState(), 0, [0], 'KING', NOW)
+
+    expect(result.status).toBe('challenge')
+    expect(result.challengerIndex).toBe(1)
+    expect(result.pile).toEqual(['ACE'])
+    expect(result.pileCount).toBe(1)
+    expect(result.players[0].hand).toEqual(['KING', 'QUEEN'])
+    expect(result.lastPlay).toEqual(expect.objectContaining({ playerId: PLAYER_A, claimedCard: 'KING', cards: ['ACE'] }))
+    expect(result.version).toBe(4)
+    expect(result.updatedAt).toBe(NOW)
+  })
+
+  it('marks the player safe once their hand is emptied', () => {
+    const state = makeState()
+    state.players[0].hand = ['ACE']
+    const result = applyCardPlay(state, 0, [0], 'ACE', NOW)
+
+    expect(result.players[0]).toEqual(expect.objectContaining({ hand: [], isSafe: true }))
+  })
+
+  it('routes to roulette with roulettePhaseStartedAt set when no eligible challenger remains', () => {
+    const state = makeState()
+    state.players[1].isSafe = true // only other player is safe → no eligible challenger
+
+    const result = applyCardPlay(state, 0, [0], 'KING', NOW)
+
+    expect(result.status).toBe('roulette')
+    expect(result.roulettePlayerIds).toEqual([PLAYER_A])
+    expect(result.roulettePhaseStartedAt).toBe(NOW)
+  })
+
+  it('invokes the Devil Card effect and clears devil fields when the holder plays the flagged rank alone', () => {
+    const state = makeState({ devilPlayerId: PLAYER_A, devilRank: 'ACE' })
+    const result = applyCardPlay(state, 0, [0], 'KING', NOW)
+
+    expect(result.lastPlay?.isDevilPlay).toBe(true)
+    expect(result.devilPlayerId).toBeNull()
+    expect(result.devilRank).toBeNull()
+  })
+
+  it('rejects a play from an eliminated player', () => {
+    const state = makeState()
+    state.players[0].isAlive = false
+    expect(() => applyCardPlay(state, 0, [0], 'KING', NOW)).toThrow('Eliminated players cannot play cards')
+  })
+
+  it('rejects duplicate card indices', () => {
+    expect(() => applyCardPlay(makeState(), 0, [0, 0], 'KING', NOW)).toThrow('Duplicate card indices are not allowed')
+  })
+
+  it('rejects an out-of-range card index', () => {
+    expect(() => applyCardPlay(makeState(), 0, [5], 'KING', NOW)).toThrow('out of range')
+  })
+
+  it('is agnostic to the caller-supplied status — the collapsed challenge→play path produces an identical result', () => {
+    // POST /api/game/play collapses the old standalone "believe" action by
+    // transitioning status to 'playing' before calling applyCardPlay (see
+    // section 3 of docs/ui-redesign-round-table.md) — applyCardPlay itself
+    // never reads state.status, so it behaves identically regardless of
+    // whether the caller passes the pre- or post-transition state.
+    const fromPlaying = applyCardPlay(makeState({ status: 'playing' }), 1, [0], 'KING', NOW)
+    const fromChallenge = applyCardPlay(makeState({ status: 'challenge', challengerIndex: 1 }), 1, [0], 'KING', NOW)
+
+    expect(fromChallenge.pile).toEqual(fromPlaying.pile)
+    expect(fromChallenge.players[1].hand).toEqual(fromPlaying.players[1].hand)
+    expect(fromChallenge.lastPlay).toEqual(fromPlaying.lastPlay)
+  })
+})
+
+describe('applyRoulettePull', () => {
+  const SHOOTER = 'shooter'
+  const OTHER = 'other'
+  const THIRD = 'third'
+  const NOW = 3_000_000
+  const SAFE_CHAMBER = [false, false, false, false, false, false]
+  const HIT_CHAMBER = [true, false, false, false, false, false]
+
+  const makeState = (overrides: Partial<GameState> = {}): GameState => ({
+    status: 'roulette',
+    players: [
+      { id: SHOOTER, name: 'Shooter', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: 1000, lastSeenAt: 1000, chamber: SAFE_CHAMBER, chamberIndex: 0 },
+      { id: OTHER, name: 'Other', hand: ['ACE', 'KING', 'QUEEN', 'JOKER', 'ACE'], isAlive: true, isSafe: false, isHost: false, joinedAt: 1001, lastSeenAt: 1001 },
+    ],
+    deck: [],
+    tableCard: 'ACE',
+    pile: ['KING'],
+    pileCount: 1,
+    currentPlayerIndex: 0,
+    challengerIndex: null,
+    lastPlay: { playerId: OTHER, playerName: 'Other', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: false },
+    roulettePlayerIds: [SHOOTER],
+    roulettePhaseStartedAt: NOW - 1000,
+    roundNumber: 2,
+    winnerId: null,
+    version: 8,
+    createdAt: 1000,
+    updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
+    settings: { bullets: 1 },
+    ...overrides,
+  })
+
+  it('eliminates the shooter when the chamber is loaded, and resets the round', () => {
+    // A 3rd player keeps 2 alive after elimination, so the round resets
+    // instead of ending the game — see the separate winner test below for
+    // the down-to-one-player case.
+    const state = makeState({ players: [
+      { id: SHOOTER, name: 'Shooter', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: 1000, lastSeenAt: 1000, chamber: HIT_CHAMBER, chamberIndex: 0 },
+      { id: OTHER, name: 'Other', hand: [], isAlive: true, isSafe: false, isHost: false, joinedAt: 1001, lastSeenAt: 1001 },
+      { id: THIRD, name: 'Third', hand: [], isAlive: true, isSafe: false, isHost: false, joinedAt: 1002, lastSeenAt: 1002 },
+    ] })
+
+    const { state: next, result } = applyRoulettePull(state, SHOOTER, NOW)
+
+    expect(result).toBe('eliminated')
+    expect(next.status).toBe('playing')
+    expect(next.players.find(p => p.id === SHOOTER)?.isAlive).toBe(false)
+  })
+
+  it('marks the shooter safe and resets the round when the chamber is empty', () => {
+    const { state: next, result } = applyRoulettePull(makeState(), SHOOTER, NOW)
+
+    expect(result).toBe('safe')
+    expect(next.status).toBe('playing')
+    expect(next.pile).toEqual([])
+    expect(next.roundNumber).toBe(3)
+  })
+
+  it('clears roulettePhaseStartedAt on round reset', () => {
+    const { state: next } = applyRoulettePull(makeState(), SHOOTER, NOW)
+    expect(next.roulettePhaseStartedAt).toBeNull()
+  })
+
+  it('does not reset the round while other shooters are still pending (Devil mass penalty), and leaves roulettePhaseStartedAt untouched', () => {
+    const state = makeState({ roulettePlayerIds: [SHOOTER, THIRD], players: [
+      { id: SHOOTER, name: 'Shooter', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: 1000, lastSeenAt: 1000, chamber: SAFE_CHAMBER, chamberIndex: 0 },
+      { id: OTHER, name: 'Other', hand: [], isAlive: true, isSafe: false, isHost: false, joinedAt: 1001, lastSeenAt: 1001 },
+      { id: THIRD, name: 'Third', hand: [], isAlive: true, isSafe: false, isHost: false, joinedAt: 1002, lastSeenAt: 1002, chamber: SAFE_CHAMBER, chamberIndex: 0 },
+    ] })
+
+    const { state: next, result } = applyRoulettePull(state, SHOOTER, NOW)
+
+    expect(result).toBe('safe')
+    expect(next.status).toBe('roulette')
+    expect(next.roulettePlayerIds).toEqual([THIRD])
+    expect(next.roulettePhaseStartedAt).toBe(state.roulettePhaseStartedAt)
+  })
+
+  it('ends the game with a winner when eliminating down to one alive player', () => {
+    const state = makeState()
+    state.players[0].chamber = HIT_CHAMBER
+
+    const { state: next, result } = applyRoulettePull(state, SHOOTER, NOW)
+
+    expect(result).toBe('eliminated')
+    expect(next.status).toBe('finished')
+    expect(next.winnerId).toBe(OTHER)
+    expect(next.roulettePlayerIds).toEqual([])
+  })
+})
+
+describe('autoPullIfRouletteExpired', () => {
+  const SHOOTER = 'shooter'
+  const OTHER = 'other'
+  const THIRD = 'third'
+  const NOW = 4_000_000
+  const SAFE_CHAMBER = [false, false, false, false, false, false]
+  const HIT_CHAMBER = [true, false, false, false, false, false]
+
+  const makeState = (overrides: Partial<GameState> = {}): GameState => ({
+    status: 'roulette',
+    players: [
+      { id: SHOOTER, name: 'Shooter', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: 1000, lastSeenAt: 1000, chamber: SAFE_CHAMBER, chamberIndex: 0 },
+      { id: OTHER, name: 'Other', hand: ['ACE', 'KING', 'QUEEN', 'JOKER', 'ACE'], isAlive: true, isSafe: false, isHost: false, joinedAt: 1001, lastSeenAt: 1001 },
+    ],
+    deck: [],
+    tableCard: 'ACE',
+    pile: ['KING'],
+    pileCount: 1,
+    currentPlayerIndex: 0,
+    challengerIndex: null,
+    lastPlay: { playerId: OTHER, playerName: 'Other', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: false },
+    roulettePlayerIds: [SHOOTER],
+    roulettePhaseStartedAt: NOW - ROULETTE_COUNTDOWN_MS - 1,
+    roundNumber: 2,
+    winnerId: null,
+    version: 8,
+    createdAt: 1000,
+    updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
+    settings: { bullets: 1 },
+    ...overrides,
+  })
+
+  it('returns null when status is not roulette', () => {
+    expect(autoPullIfRouletteExpired(makeState({ status: 'playing' }), NOW)).toBeNull()
+  })
+
+  it('returns null when there are no pending shooters', () => {
+    expect(autoPullIfRouletteExpired(makeState({ roulettePlayerIds: [] }), NOW)).toBeNull()
+  })
+
+  it('returns null before the countdown expires', () => {
+    expect(autoPullIfRouletteExpired(makeState({ roulettePhaseStartedAt: NOW - 1000 }), NOW)).toBeNull()
+  })
+
+  it('returns null when roulettePhaseStartedAt is null', () => {
+    expect(autoPullIfRouletteExpired(makeState({ roulettePhaseStartedAt: null }), NOW)).toBeNull()
+  })
+
+  it('auto-pulls a single pending shooter once expired', () => {
+    const result = autoPullIfRouletteExpired(makeState(), NOW)
+
+    expect(result).not.toBeNull()
+    // Whatever the chamber outcome, the shooter's pull was resolved — status
+    // moved on from a still-pending 'roulette' with this shooter queued.
+    expect(result?.roulettePlayerIds).not.toContain(SHOOTER)
+  })
+
+  it('chains into a round reset when the last pending shooter is auto-pulled and survives', () => {
+    const result = autoPullIfRouletteExpired(makeState(), NOW)
+
+    expect(result?.status).toBe('playing')
+    expect(result?.roundNumber).toBe(3)
+    expect(result?.roulettePhaseStartedAt).toBeNull()
+  })
+
+  it('chains into finished when auto-pull eliminates down to one alive player', () => {
+    const state = makeState()
+    state.players[0].chamber = HIT_CHAMBER
+
+    const result = autoPullIfRouletteExpired(state, NOW)
+
+    expect(result?.status).toBe('finished')
+    expect(result?.winnerId).toBe(OTHER)
+  })
+
+  it('auto-pulls every pending shooter together in a Devil mass penalty', () => {
+    const state = makeState({
+      roulettePlayerIds: [SHOOTER, THIRD],
+      players: [
+        { id: SHOOTER, name: 'Shooter', hand: [], isAlive: true, isSafe: false, isHost: true, joinedAt: 1000, lastSeenAt: 1000, chamber: SAFE_CHAMBER, chamberIndex: 0 },
+        { id: OTHER, name: 'Other', hand: [], isAlive: true, isSafe: false, isHost: false, joinedAt: 1001, lastSeenAt: 1001 },
+        { id: THIRD, name: 'Third', hand: [], isAlive: true, isSafe: false, isHost: false, joinedAt: 1002, lastSeenAt: 1002, chamber: SAFE_CHAMBER, chamberIndex: 0 },
+      ],
+    })
+
+    const result = autoPullIfRouletteExpired(state, NOW)
+
+    // Both pending shooters resolved in one call, sharing the single expired
+    // countdown, rather than one-at-a-time with a fresh clock each.
+    expect(result?.status).toBe('playing')
+    expect(result?.roulettePlayerIds).toEqual([])
+    expect(result?.roundNumber).toBe(3)
   })
 })
 

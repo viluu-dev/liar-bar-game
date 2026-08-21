@@ -94,12 +94,15 @@ describe('/api/game/shuffle', () => {
     currentPlayerIndex: -1,
     challengerIndex: null,
     lastPlay: null,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 1,
     winnerId: null,
     version: 5,
     createdAt: 1000,
     updatedAt: 1000,
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides
   })
 

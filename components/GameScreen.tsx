@@ -3,10 +3,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { ProjectedGameState, ProjectedLastPlay } from '@/lib/types'
 import TableCard from './TableCard'
-import PlayersList from './PlayersList'
+import RoundTable from './RoundTable'
 import CardHand from './CardHand'
 import GameStatus from './GameStatus'
-import ChallengeDecision from './ChallengeDecision'
 import ChallengeReveal from './ChallengeReveal'
 import GameOverScreen from './GameOverScreen'
 import ClaimHistory from './ClaimHistory'
@@ -71,13 +70,13 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
     }
   }
 
-  const handleChallenge = async (action: 'believe' | 'liar') => {
+  const handleLiar = async () => {
     let res: Response
     try {
       res = await fetch('/api/game/challenge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, joinCode, action }),
+        body: JSON.stringify({ playerId, joinCode, action: 'liar' }),
       })
     } catch {
       throw new Error('Network error — try again')
@@ -118,6 +117,19 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
     }
   }
 
+  const myIndex = gameState.players.findIndex(p => p.id === playerId)
+  const activePlayerId =
+    gameState.status === 'playing'
+      ? gameState.players[gameState.currentPlayerIndex]?.id ?? null
+      : gameState.status === 'challenge'
+        ? gameState.players[gameState.challengerIndex ?? -1]?.id ?? null
+        : null
+
+  const isMyTurn =
+    gameState.status === 'playing'
+      ? gameState.players[gameState.currentPlayerIndex]?.id === playerId
+      : gameState.players[gameState.challengerIndex ?? -1]?.id === playerId
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white flex flex-col">
       <div className="shrink-0 p-4 border-b border-gray-700">
@@ -126,11 +138,7 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
 
       <div className="flex-1 flex flex-col p-4 space-y-6">
         <div className="shrink-0">
-          <TableCard
-            card={gameState.tableCard}
-            pileCount={gameState.pileCount}
-            roundNumber={gameState.roundNumber}
-          />
+          <TableCard card={gameState.tableCard} />
         </div>
 
         {claimHistory.length > 0 && (
@@ -139,35 +147,33 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
           </div>
         )}
 
-        <div className="flex-1 min-h-0">
-          <PlayersList
+        <div className="flex-1 min-h-0 flex items-center justify-center">
+          <RoundTable
             players={gameState.players}
-            currentPlayerId={playerId}
-            currentPlayerIndex={gameState.currentPlayerIndex}
+            myIndex={myIndex}
+            myPlayerId={playerId}
+            activePlayerId={activePlayerId}
+            roulettePlayerIds={gameState.roulettePlayerIds}
+            roulettePhaseStartedAt={gameState.roulettePhaseStartedAt}
+            pileCount={gameState.pileCount}
+            tableCard={gameState.tableCard}
+            roundNumber={gameState.roundNumber}
           />
         </div>
       </div>
 
       <div className="shrink-0 p-4 border-t border-gray-700">
-        {gameState.status === 'challenge' &&
-        gameState.lastPlay &&
-        gameState.challengerIndex !== null ? (
-          <ChallengeDecision
-            lastPlay={gameState.lastPlay}
-            challenger={gameState.players[gameState.challengerIndex]}
-            isChallenger={gameState.players[gameState.challengerIndex]?.id === playerId}
-            onChallenge={handleChallenge}
-          />
-        ) : gameState.status === 'roulette' &&
-          gameState.lastPlay?.cards &&
-          gameState.roulettePlayerId &&
-          gameState.tableCard ? (
+        {gameState.status === 'roulette' &&
+        gameState.lastPlay?.cards &&
+        gameState.roulettePlayerIds.length > 0 &&
+        gameState.tableCard ? (
           <ChallengeReveal
-            lastPlay={gameState.lastPlay as typeof gameState.lastPlay & { cards: NonNullable<typeof gameState.lastPlay.cards> }}
+            lastPlay={gameState.lastPlay as typeof gameState.lastPlay & { cards: NonNullable<typeof gameState.lastPlay.cards>; isDevilPlay: boolean }}
             tableCard={gameState.tableCard}
-            loser={gameState.players.find(p => p.id === gameState.roulettePlayerId)!}
+            pendingShooters={gameState.players.filter(p => gameState.roulettePlayerIds.includes(p.id))}
             players={gameState.players}
             playerId={playerId}
+            roulettePhaseStartedAt={gameState.status === 'roulette' ? gameState.roulettePhaseStartedAt : null}
             onRoulette={handleRoulette}
           />
         ) : (
@@ -177,9 +183,12 @@ export default function GameScreen({ gameState, playerId, joinCode }: GameScreen
             )}
             <CardHand
               cards={gameState.myHand}
-              isMyTurn={gameState.players[gameState.currentPlayerIndex]?.id === playerId}
+              isMyTurn={isMyTurn}
               gameStatus={gameState.status}
+              myDevilRank={gameState.myDevilRank}
+              lastPlay={gameState.status === 'challenge' ? gameState.lastPlay : null}
               onPlay={handlePlay}
+              onLiar={handleLiar}
             />
           </>
         )}

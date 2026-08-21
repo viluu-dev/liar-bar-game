@@ -43,11 +43,13 @@ export default function GameStatus({ gameState, playerId }: GameStatusProps) {
         return 'Challenge in progress'
       
       case 'roulette':
-        if (gameState.roulettePlayerId === playerId) {
+        if (gameState.roulettePlayerIds.includes(playerId)) {
           return 'Your fate awaits - click the trigger'
-        } else if (gameState.roulettePlayerId) {
-          const roulettePlayer = gameState.players.find(p => p.id === gameState.roulettePlayerId)
+        } else if (gameState.roulettePlayerIds.length === 1) {
+          const roulettePlayer = gameState.players.find(p => p.id === gameState.roulettePlayerIds[0])
           return `${roulettePlayer?.name || 'Someone'} must face the roulette`
+        } else if (gameState.roulettePlayerIds.length > 1) {
+          return `${gameState.roulettePlayerIds.length} players must face the roulette`
         }
         return 'Roulette in progress'
       

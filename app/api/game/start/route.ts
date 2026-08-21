@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { StartGameRequestSchema } from '@/lib/schemas'
 import { getGameState, setGameState, withGameLock } from '@/lib/redis'
-import { createInitialDeck, shuffleDeck, dealCards, selectTableCard, initChamber } from '@/lib/game-logic'
+import { createDeckForPlayerCount, shuffleDeck, dealCards, selectTableCard, initChamber, selectDevilCard } from '@/lib/game-logic'
+import { MIN_PLAYERS } from '@/lib/constants'
 import type { GameActionResponse } from '@/lib/types'
 
 export async function POST(request: NextRequest) {
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { playerId, joinCode, bullets } = parseResult.data
+    const { playerId, joinCode, bullets, devilMode } = parseResult.data
 
     // Use distributed lock to prevent concurrent modifications
     const result = await withGameLock(joinCode, async () => {
@@ -45,12 +46,16 @@ export async function POST(request: NextRequest) {
       }
 
       // Validate minimum player count
-      if (gameState.players.length < 2) {
-        throw new Error('At least 2 players are required to start the game')
+      if (gameState.players.length < MIN_PLAYERS) {
+        throw new Error(`At least ${MIN_PLAYERS} players are required to start the game`)
       }
 
-      // Create and shuffle the deck
-      const initialDeck = createInitialDeck()
+      const finalBullets = bullets ?? gameState.settings?.bullets ?? 1
+      const finalDevilMode = devilMode ?? gameState.settings?.devilMode ?? false
+      const finalSettings = { bullets: finalBullets, devilMode: finalDevilMode }
+
+      // Create and shuffle the deck, scaled for the current player count
+      const initialDeck = createDeckForPlayerCount(gameState.players.length)
       const shuffledDeck = shuffleDeck(initialDeck)
 
       // Deal 5 cards to each player
@@ -59,8 +64,10 @@ export async function POST(request: NextRequest) {
       // Select a random Table Card for this round
       const tableCard = selectTableCard()
 
-      const finalBullets = bullets ?? gameState.settings?.bullets ?? 1
-      const finalSettings = { bullets: finalBullets }
+      // Flag one dealt Ace/King/Queen as this round's Devil Card
+      const devilPick = finalDevilMode ? selectDevilCard(dealResult.playerHands) : null
+      const devilPlayerId = devilPick ? gameState.players[devilPick.handIndex].id : null
+      const devilRank = devilPick?.rank ?? null
 
       // Each player gets their own chamber
       const playersWithHands = gameState.players.map((player, index) => ({
@@ -83,6 +90,8 @@ export async function POST(request: NextRequest) {
         challengerIndex: null,
         lastPlay: null,
         settings: finalSettings,
+        devilPlayerId,
+        devilRank,
         version: gameState.version + 1,
         updatedAt: Date.now(),
       }

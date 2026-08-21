@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
 
     const { playerName, settings } = parseResult.data
     const bullets = settings?.bullets ?? 1
+    const devilMode = settings?.devilMode ?? false
 
     // Generate a join code upfront so we can lock on it
     const joinCode = randomBytes(2).toString('hex').toUpperCase()
@@ -55,14 +56,17 @@ export async function POST(request: NextRequest) {
         currentPlayerIndex: -1,
         challengerIndex: null,
         lastPlay: null,
-        roulettePlayerId: null,
+        roulettePlayerIds: [],
+        roulettePhaseStartedAt: null,
         roundNumber: 1,
         winnerId: null,
         version: 0,
         createdAt: now,
         updatedAt: now,
         joinCode,
-        settings: { bullets }
+        settings: { bullets, devilMode },
+        devilPlayerId: null,
+        devilRank: null,
       }
 
       await setGameState(initialGameState)

@@ -42,8 +42,9 @@ describe('/api/game/rematch', () => {
     pileCount: 1,
     currentPlayerIndex: 1,
     challengerIndex: null,
-    lastPlay: { playerId: HOST_UUID, playerName: 'Alice', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE' },
-    roulettePlayerId: HOST_UUID,
+    lastPlay: { playerId: HOST_UUID, playerName: 'Alice', cards: ['KING'], claimedCount: 1, claimedCard: 'ACE', isDevilPlay: false },
+    roulettePlayerIds: [HOST_UUID],
+    roulettePhaseStartedAt: null,
     roundNumber: 3,
     winnerId: PLAYER2_UUID,
     version: 20,
@@ -51,6 +52,8 @@ describe('/api/game/rematch', () => {
     updatedAt: 2000,
     joinCode: 'ABCD',
     settings: { bullets: 1 },
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides,
   })
 
@@ -68,7 +71,8 @@ describe('/api/game/rematch', () => {
     currentPlayerIndex: -1,
     challengerIndex: null,
     lastPlay: null,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 3,
     winnerId: null,
     version: 21,
@@ -77,6 +81,8 @@ describe('/api/game/rematch', () => {
     joinCode: 'ABCD',
     settings: { bullets: 1 },
     rematchPlayerIds: [HOST_UUID],
+    devilPlayerId: null,
+    devilRank: null,
     ...overrides,
   })
 
@@ -169,7 +175,7 @@ describe('/api/game/rematch', () => {
           tableCard: null,
           lastPlay: null,
           challengerIndex: null,
-          roulettePlayerId: null,
+          roulettePlayerIds: [],
           winnerId: null,
           currentPlayerIndex: -1,
         })

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GameStateQuerySchema } from '@/lib/schemas'
 import { getGameState, setGameState, projectGameView, withGameLock } from '@/lib/redis'
-import { autoSkipIfInactive } from '@/lib/game-logic'
+import { autoSkipIfInactive, autoPullIfRouletteExpired } from '@/lib/game-logic'
 import type { GameState, GameStateResponse } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
@@ -85,18 +85,21 @@ export async function GET(request: NextRequest) {
       // Use original state for projection
     }
 
-    // Auto-skip inactive player (non-blocking — lock failure means another poller is handling it)
+    // Auto-skip inactive player, or auto-pull an expired roulette countdown
+    // (non-blocking — lock failure means another poller is handling it). The
+    // two are mutually exclusive by status (never simultaneously
+    // 'playing'/'challenge' and 'roulette'), hence the simple `??` fallback.
     let finalState = updatedGameState
     try {
-      const skipped = await withGameLock(code, async () => {
+      const advanced = await withGameLock(code, async () => {
         const fresh = await getGameState(code)
         if (!fresh) return null
-        const next = autoSkipIfInactive(fresh as GameState, Date.now())
+        const next = autoSkipIfInactive(fresh as GameState, Date.now()) ?? autoPullIfRouletteExpired(fresh as GameState, Date.now())
         if (!next) return null
         await setGameState(next as GameState)
         return next as GameState
       })
-      if (skipped) finalState = skipped
+      if (advanced) finalState = advanced
     } catch { /* lock contention — another poller handled it */ }
 
     // Use projectGameView to ensure data security

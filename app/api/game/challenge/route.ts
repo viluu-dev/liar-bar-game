@@ -75,6 +75,34 @@ export async function POST(request: NextRequest) {
         throw new Error('No table card set')
       }
 
+      // Devil Card: always a valid wildcard, so the challenge fails outright —
+      // but instead of the normal single-loser outcome, every OTHER alive
+      // player (safe or not) must face the revolver (docs/devil.card.md).
+      const isDevilPlay = gameState.lastPlay.isDevilPlay
+
+      if (isDevilPlay) {
+        const devilPlayerId = gameState.lastPlay.playerId
+        const roulettePlayerIds = gameState.players
+          .filter(p => p.isAlive && p.id !== devilPlayerId)
+          .map(p => p.id)
+
+        const updatedGameState = {
+          ...gameState,
+          status: 'roulette' as const,
+          roulettePlayerIds,
+          roulettePhaseStartedAt: Date.now(),
+          challengerIndex: null,
+          players: gameState.players.map((p, i) =>
+            i === gameState.challengerIndex ? { ...p, lastSeenAt: Date.now() } : p
+          ),
+          version: gameState.version + 1,
+          updatedAt: Date.now(),
+        }
+
+        await setGameState(updatedGameState)
+        return updatedGameState.version
+      }
+
       const { isValid } = resolveChallenge(gameState.lastPlay.cards, gameState.tableCard)
 
       // honest play (isValid) → challenger called liar incorrectly → challenger loses
@@ -86,7 +114,8 @@ export async function POST(request: NextRequest) {
       const updatedGameState = {
         ...gameState,
         status: 'roulette' as const,
-        roulettePlayerId: loserPlayerId,
+        roulettePlayerIds: [loserPlayerId],
+        roulettePhaseStartedAt: Date.now(),
         challengerIndex: null,
         players: gameState.players.map((p, i) =>
           i === gameState.challengerIndex ? { ...p, lastSeenAt: Date.now() } : p

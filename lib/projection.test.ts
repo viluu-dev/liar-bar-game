@@ -47,7 +47,8 @@ function createTestGameState(): GameState {
     playerName: 'Alice',
     cards: ['KING', 'KING'] as Card[],
     claimedCount: 2,
-    claimedCard: 'KING'
+    claimedCard: 'KING',
+    isDevilPlay: false,
   }
 
   return {
@@ -60,12 +61,15 @@ function createTestGameState(): GameState {
     currentPlayerIndex: 0,
     challengerIndex: 1,
     lastPlay,
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
+    roulettePhaseStartedAt: null,
     roundNumber: 2,
     winnerId: null,
     version: 15,
     createdAt: Date.now() - 10000,
     updatedAt: Date.now() - 100,
+    devilPlayerId: null,
+    devilRank: null,
   }
 }
 
@@ -193,7 +197,7 @@ describe('projectGameView', () => {
       expect(projection.tableCard).toBe('KING')
       expect(projection.currentPlayerIndex).toBe(0)
       expect(projection.challengerIndex).toBe(1)
-      expect(projection.roulettePlayerId).toBeNull()
+      expect(projection.roulettePlayerIds).toEqual([])
       expect(projection.roundNumber).toBe(2)
       expect(projection.winnerId).toBeNull()
       expect(projection.version).toBe(15)
@@ -261,7 +265,7 @@ describe('projectGameView', () => {
       gameState.tableCard = null
       gameState.challengerIndex = null
       gameState.lastPlay = null
-      gameState.roulettePlayerId = null
+      gameState.roulettePlayerIds = []
       gameState.winnerId = null
       
       const projection = projectGameView(gameState, 'player-1-uuid')
@@ -269,8 +273,50 @@ describe('projectGameView', () => {
       expect(projection.tableCard).toBeNull()
       expect(projection.challengerIndex).toBeNull()
       expect(projection.lastPlay).toBeNull()
-      expect(projection.roulettePlayerId).toBeNull()
+      expect(projection.roulettePlayerIds).toEqual([])
       expect(projection.winnerId).toBeNull()
+    })
+  })
+
+  describe('Devil Card Secrecy', () => {
+    it('never exposes devilPlayerId as a key on the projection', () => {
+      const gameState = createTestGameState()
+      gameState.devilPlayerId = 'player-1-uuid'
+      gameState.devilRank = 'KING'
+
+      const projection = projectGameView(gameState, 'player-1-uuid')
+
+      expect('devilPlayerId' in projection).toBe(false)
+    })
+
+    it('only reveals myDevilRank to the actual holder', () => {
+      const gameState = createTestGameState()
+      gameState.devilPlayerId = 'player-1-uuid'
+      gameState.devilRank = 'KING'
+
+      expect(projectGameView(gameState, 'player-1-uuid').myDevilRank).toBe('KING')
+      expect(projectGameView(gameState, 'player-2-uuid').myDevilRank).toBeNull()
+      expect(projectGameView(gameState, 'player-3-uuid').myDevilRank).toBeNull()
+    })
+
+    it('returns null myDevilRank when no Devil Card is in play', () => {
+      const gameState = createTestGameState()
+      const projection = projectGameView(gameState, 'player-1-uuid')
+
+      expect(projection.myDevilRank).toBeNull()
+    })
+
+    it('hides isDevilPlay on lastPlay until the challenge is resolved (status = roulette)', () => {
+      const gameState = createTestGameState()
+      gameState.lastPlay!.isDevilPlay = true
+      gameState.status = 'challenge'
+
+      const preReveal = projectGameView(gameState, 'player-2-uuid')
+      expect('isDevilPlay' in (preReveal.lastPlay ?? {})).toBe(false)
+
+      gameState.status = 'roulette'
+      const postReveal = projectGameView(gameState, 'player-2-uuid')
+      expect(postReveal.lastPlay?.isDevilPlay).toBe(true)
     })
   })
 })

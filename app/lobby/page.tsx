@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import { useGameChannel } from '@/lib/useGameChannel'
 import HelpButton from '@/components/HelpButton'
+import { MIN_PLAYERS, MAX_PLAYERS } from '@/lib/constants'
 import type { GameStateResponse, GameActionResponse } from '@/lib/types'
 
 async function fetchGameState(playerId: string, joinCode: string): Promise<GameStateResponse> {
@@ -20,6 +21,7 @@ export default function LobbyPage() {
   const [isShuffling, setIsShuffling] = useState(false)
   const [error, setError] = useState('')
   const [pendingBullets, setPendingBullets] = useState(1)
+  const [pendingDevilMode, setPendingDevilMode] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
   const router = useRouter()
 
@@ -71,6 +73,12 @@ export default function LobbyPage() {
     }
   }, [gameData?.gameState?.settings?.bullets])
 
+  useEffect(() => {
+    if (gameData?.gameState?.settings?.devilMode !== undefined) {
+      setPendingDevilMode(gameData.gameState.settings.devilMode)
+    }
+  }, [gameData?.gameState?.settings?.devilMode])
+
   const handleStartGame = async () => {
     if (!playerId || !joinCode) return
 
@@ -81,7 +89,7 @@ export default function LobbyPage() {
       const response = await fetch('/api/game/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, joinCode, bullets: pendingBullets }),
+        body: JSON.stringify({ playerId, joinCode, bullets: pendingBullets, devilMode: pendingDevilMode }),
       })
 
       if (!response.ok) {
@@ -192,11 +200,11 @@ export default function LobbyPage() {
   const currentPlayer = players.find(p => p.id === playerId)
   const isHost = currentPlayer?.isHost ?? false
   const playerCount = players.length
-  const canStartGame = isHost && playerCount >= 2 && !isStarting
+  const canStartGame = isHost && playerCount >= MIN_PLAYERS && !isStarting
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
-      <HelpButton playerCount={playerCount} bullets={pendingBullets} />
+      <HelpButton playerCount={playerCount} bullets={pendingBullets} devilMode={pendingDevilMode} />
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-red-500 mb-2">Game Lobby</h1>
@@ -223,12 +231,12 @@ export default function LobbyPage() {
 
         <div className="bg-gray-800 rounded-lg p-4 text-center">
           <h2 className="text-xl font-semibold text-white mb-2">
-            Players ({playerCount}/6)
+            Players ({playerCount}/{MAX_PLAYERS})
           </h2>
           <p className="text-gray-400 text-sm">
-            {playerCount < 2
-              ? 'Need at least 2 players to start'
-              : `${6 - playerCount} more players can join`
+            {playerCount < MIN_PLAYERS
+              ? `Need at least ${MIN_PLAYERS} players to start`
+              : `${MAX_PLAYERS - playerCount} more players can join`
             }
           </p>
         </div>
@@ -315,6 +323,33 @@ export default function LobbyPage() {
               </div>
             </div>
 
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300">
+                    😈 Devil Mode
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Adds a solo wildcard that can trigger a mass penalty
+                  </p>
+                </div>
+                <button
+                  onClick={() => setPendingDevilMode(v => !v)}
+                  role="switch"
+                  aria-checked={pendingDevilMode}
+                  className={`min-h-[32px] w-14 shrink-0 rounded-full transition-colors relative ${
+                    pendingDevilMode ? 'bg-red-600' : 'bg-gray-700'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform ${
+                      pendingDevilMode ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
             <button
               onClick={handleStartGame}
               disabled={!canStartGame}
@@ -322,13 +357,13 @@ export default function LobbyPage() {
             >
               {isStarting
                 ? 'Starting Game...'
-                : playerCount < 2
-                  ? 'Need at least 2 players'
+                : playerCount < MIN_PLAYERS
+                  ? `Need at least ${MIN_PLAYERS} players`
                   : 'Start Game'
               }
             </button>
 
-            {playerCount < 2 && (
+            {playerCount < MIN_PLAYERS && (
               <p className="text-center text-gray-500 text-sm">
                 Ask friends to join using the code above
               </p>

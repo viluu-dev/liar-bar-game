@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
             tableCard: null,
             lastPlay: null,
             challengerIndex: null,
-            roulettePlayerId: null,
+            roulettePlayerIds: [],
             winnerId: null,
             currentPlayerIndex: -1,
             rematchPlayerIds: [],

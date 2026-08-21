@@ -49,24 +49,27 @@ describe('GameStateSchema', () => {
       playerName: 'Player2',
       cards: ['ACE', 'ACE'],
       claimedCount: 2,
-      claimedCard: 'ACE' as const
+      claimedCard: 'ACE' as const,
+      isDevilPlay: false
     },
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
     version: 42,
     createdAt: 1640995200000,
-    updatedAt: 1640995300000
+    updatedAt: 1640995300000,
+    devilPlayerId: null,
+    devilRank: null
   }
 
   it('should validate complete valid game state', () => {
     expect(() => GameStateSchema.parse(validGameState)).not.toThrow()
   })
 
-  it('should enforce maximum 6 players', () => {
+  it('should enforce maximum 8 players', () => {
     const tooManyPlayers = {
       ...validGameState,
-      players: Array(7).fill(validGameState.players[0])
+      players: Array(9).fill(validGameState.players[0])
     }
     expect(() => GameStateSchema.parse(tooManyPlayers)).toThrow()
   })
@@ -85,7 +88,7 @@ describe('GameStateSchema', () => {
       tableCard: null,
       challengerIndex: null,
       lastPlay: null,
-      roulettePlayerId: null,
+      roulettePlayerIds: [],
       winnerId: null
     }
     expect(() => GameStateSchema.parse(nullableFields)).not.toThrow()
@@ -156,10 +159,11 @@ describe('ProjectedGameStateSchema', () => {
       claimedCount: 2,
       claimedCard: 'ACE' as const
     },
-    roulettePlayerId: null,
+    roulettePlayerIds: [],
     roundNumber: 1,
     winnerId: null,
-    version: 42
+    version: 42,
+    myDevilRank: null
   }
 
   it('should validate complete projected game state', () => {
@@ -195,10 +199,11 @@ describe('API Response Schemas', () => {
         currentPlayerIndex: -1,
         challengerIndex: null,
         lastPlay: null,
-        roulettePlayerId: null,
+        roulettePlayerIds: [],
         roundNumber: 1,
         winnerId: null,
-        version: 42
+        version: 42,
+        myDevilRank: null
       }
     }
     expect(() => GameStateResponseSchema.parse(response)).not.toThrow()
